@@ -1,0 +1,13 @@
+:root {
+  --color-ink: #263340;
+  --color-paper: #f4f3f0;
+  --color-mist: #dde6eb;
+  --color-peach: #ead4c7;
+  --color-moss: #6f8d89;
+  --color-amber: #4f6e8c;
+  --color-line: rgba(67, 87, 106, 0.14);
+
+  --radius-panel: 32px;
+  --shadow-soft: 0 24px 60px rgba(33, 48, 64, 0.09);
+  --shadow-card: 0 14px 38px rgba(33, 48, 64, 0.08);
+}
