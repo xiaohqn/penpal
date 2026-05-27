@@ -23,6 +23,27 @@ def utc_iso() -> str:
 
 
 class BatchSessionService:
+    def _preserve_original_raw_response(
+        self,
+        existing_response: str,
+        incoming_response: str,
+    ) -> str:
+        """
+        输入：
+        - existing_response：当前批量条目里已经持久化过的原始 AI 回复。
+        - incoming_response：本次前端或重生成流程准备写回的新原始回复字段。
+        输出：
+        - 返回最终应该保留到数据库里的原始回复文本。
+        作用：
+        - 一旦某条批量记录已经有“首版原始回复”，后续批注重生成或再次保存都不应覆盖它；
+          只有首次为空时，才接受新的原始回复写入。
+        """
+
+        normalized_existing = existing_response.strip()
+        if normalized_existing:
+            return normalized_existing
+        return incoming_response.strip()
+
     def _derive_rag_ready(
         self,
         expert_annotation: str,
@@ -123,7 +144,10 @@ class BatchSessionService:
         item.selected_style_config_json = payload.selected_style_config
         item.planner_output_json = payload.planner_output
         item.draft_candidates_json = payload.draft_candidates
-        item.ai_selected_raw_response = payload.ai_selected_raw_response
+        item.ai_selected_raw_response = self._preserve_original_raw_response(
+            item.ai_selected_raw_response,
+            payload.ai_selected_raw_response,
+        )
         item.latest_response = payload.latest_response
         item.expert_annotation = payload.expert_annotation
         item.rag_ready = self._derive_rag_ready(payload.expert_annotation, payload.source_annotations)
@@ -162,7 +186,10 @@ class BatchSessionService:
         item.latest_response = latest_response
         item.planner_output_json = planner_output
         item.draft_candidates_json = drafts
-        item.ai_selected_raw_response = ai_selected_raw_response
+        item.ai_selected_raw_response = self._preserve_original_raw_response(
+            item.ai_selected_raw_response,
+            ai_selected_raw_response,
+        )
         item.selected_persona_name = selected_persona_name
         item.selected_persona_names_json = selected_persona_names
         item.selected_style_config_json = selected_style_config

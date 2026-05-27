@@ -80,3 +80,107 @@ def test_export_records_excel(tmp_path):
     assert rows[1][4] == payload["sample_reason"]
     assert rows[0][8] == "expert_annotation"
     assert rows[1][8] == payload["expert_annotation"]
+
+
+def test_batch_regenerate_keeps_first_ai_reply_as_original_response(tmp_path):
+    """
+    输入：
+    - 临时测试数据库目录，以及一个已经导入的批量任务。
+    输出：
+    - 断言批量条目在批注重生成后，`ai_selected_raw_response` 仍然保留首轮草稿，而不是被新版本覆盖。
+    作用：
+    - 防止“原始回复”字段在批量工作流里被批注重生成结果污染，导致历史记录失去首版基线。
+    """
+
+    client = build_test_client(tmp_path)
+    excel_bytes = make_test_excel()
+    import_response = client.post(
+        "/api/v1/batch/import",
+        files={"file": ("batch.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert import_response.status_code == 200
+
+    session_payload = import_response.json()
+    session_id = session_payload["id"]
+    item = session_payload["items"][0]
+    item_id = item["id"]
+
+    initial_response = "这是首轮 AI 草稿，请先找老师聊聊。"
+    update_response = client.put(
+        f"/api/v1/batch/sessions/{session_id}/items/{item_id}",
+        json={
+            "selected_persona_names": ["温暖倾听者"],
+            "selected_persona_name": "温暖倾听者",
+            "selected_style_config": {"persona_name": "温暖倾听者"},
+            "planner_output": {"generation_plan": "先共情，再给现实建议"},
+            "draft_candidates": [
+                {
+                    "draft_id": "温暖倾听者::api",
+                    "persona_name": "温暖倾听者",
+                    "source": "api",
+                    "source_label": "API 模型",
+                    "style_config": {"persona_name": "温暖倾听者"},
+                    "planner_output": {"generation_plan": "先共情，再给现实建议"},
+                    "response": initial_response,
+                    "raw_response": initial_response,
+                }
+            ],
+            "ai_selected_raw_response": "",
+            "latest_response": initial_response,
+            "expert_annotation": "",
+            "rag_ready": "pending",
+            "sample_reason": "",
+            "sample_snapshot": {},
+            "source_annotations": [],
+            "response_versions": [],
+            "active_version_index": 0,
+            "status": "in_progress",
+            "record_id": None,
+        },
+    )
+    assert update_response.status_code == 200
+
+    async def fake_generate_all(user_input: str, persona_names: list[str]):
+        assert "【当前 AI 回复】" in user_input
+        assert persona_names == ["温暖倾听者"]
+        return [
+            {
+                "draft_id": "温暖倾听者::api",
+                "persona_name": "温暖倾听者",
+                "source": "api",
+                "source_label": "API 模型",
+                "style_config": {"persona_name": "温暖倾听者"},
+                "planner_output": {"generation_plan": "按批注重写"},
+                "response": "这是批注重生成后的新版本，请联系班主任和家长。",
+                "raw_response": "这是批注重生成后的新版本，请联系班主任和家长。",
+            }
+        ]
+
+    client.app.state.orchestration_service.generate_all = fake_generate_all
+
+    regenerate_response = client.post(
+        f"/api/v1/batch/sessions/{session_id}/items/{item_id}/regenerate",
+        json={
+            "selected_persona_name": "温暖倾听者",
+            "selected_persona_names": ["温暖倾听者"],
+            "source_annotations": [
+                {
+                    "id": "annotation-1",
+                    "start": 0,
+                    "end": 6,
+                    "quote": "这是首轮 AI 草稿",
+                    "note": "这里还需要补老师和家长两个现实支持对象。",
+                    "color": "amber",
+                }
+            ],
+            "expert_annotation": "把现实求助对象说得更具体一些。",
+            "current_response": initial_response,
+        },
+    )
+    assert regenerate_response.status_code == 200
+
+    updated_item = next(
+        current for current in regenerate_response.json()["items"] if current["id"] == item_id
+    )
+    assert updated_item["ai_selected_raw_response"] == initial_response
+    assert updated_item["latest_response"] == "这是批注重生成后的新版本，请联系班主任和家长。"

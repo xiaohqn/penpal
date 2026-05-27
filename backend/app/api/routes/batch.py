@@ -215,6 +215,11 @@ async def regenerate_batch_session_item(
     if selected_draft is None:
         raise HTTPException(status_code=400, detail="No draft generated")
 
+    original_raw_response = item.ai_selected_raw_response or _resolve_original_raw_response_from_item(
+        item.draft_candidates_json,
+        payload.selected_persona_name,
+    )
+
     existing_versions = list(item.response_versions_json or [])
     version = {
         "version_index": len(existing_versions),
@@ -234,7 +239,9 @@ async def regenerate_batch_session_item(
         latest_response=selected_draft["response"],
         planner_output=selected_draft.get("planner_output", {}),
         drafts=drafts,
-        ai_selected_raw_response=selected_draft.get("raw_response", ""),
+        ai_selected_raw_response=original_raw_response
+        or selected_draft.get("raw_response", "")
+        or selected_draft.get("response", ""),
         selected_persona_name=payload.selected_persona_name,
         selected_persona_names=payload.selected_persona_names or [payload.selected_persona_name],
         selected_style_config=selected_draft.get("style_config", {}),
@@ -252,3 +259,31 @@ def _build_annotation_block(annotations: list[object]) -> str:
             continue
         lines.append(f"{index}. 回复片段：{quote or '未填写'}；专家批注：{note or '未填写'}")
     return "\n".join(lines)
+
+
+def _resolve_original_raw_response_from_item(
+    draft_candidates: list[dict[str, object]],
+    selected_persona_name: str,
+) -> str:
+    """
+    输入：
+    - draft_candidates：当前批量条目在重生成前保存下来的候选草稿列表。
+    - selected_persona_name：本次批注重生成所针对的人格名称。
+    输出：
+    - 返回这条人格候选在首轮生成时的原始回复；找不到则返回空字符串。
+    作用：
+    - 当批量条目还没正式保存进历史库、`ai_selected_raw_response` 仍为空时，
+      尽量从条目现有候选里把真正的首版原始回复补出来，避免第一次重生成就覆盖“原始回复”字段。
+    """
+
+    for draft in draft_candidates:
+        persona_name = str(draft.get("persona_name", ""))
+        if persona_name != selected_persona_name:
+            continue
+        raw_response = str(draft.get("raw_response", "")).strip()
+        if raw_response:
+            return raw_response
+        response = str(draft.get("response", "")).strip()
+        if response:
+            return response
+    return ""

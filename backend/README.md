@@ -73,6 +73,41 @@ DOUBAO_API_KEY=你的 API 模型 Key
 
 这样前端在“生成来源模式”切到“对比”时，会同时返回两类结果。
 
+### 安全链路单独模式
+
+安全检测与安全回复现在也支持独立 env 配置，不必完全跟随普通草稿生成主链路。
+
+可选值：
+
+- `SAFETY_MODE=api`
+  默认推荐值。安全检测、高风险回复和安全高亮都走真实 API。
+- `SAFETY_MODE=mock`
+  只测试安全页面切换、历史保存和安全回复工作流，不调用真实模型。
+- `SAFETY_MODE=local`
+  安全链路强制走本地安全模型分支。
+
+例如，如果你只想测真实安全内容，但普通草稿仍然保持 API 主链路，可以这样配：
+
+```env
+MOCK_LLM=false
+PLANNER_MODE=api
+GENERATOR_MODE=api
+SAFETY_MODE=api
+GPT_API_KEY=你的 Planner API Key
+DOUBAO_API_KEY=你的安全与生成 API Key
+```
+
+如果你只想演示安全流程，而不关心真实模型效果，可以这样配：
+
+```env
+MOCK_LLM=false
+PLANNER_MODE=api
+GENERATOR_MODE=api
+SAFETY_MODE=mock
+GPT_API_KEY=你的 Planner API Key
+DOUBAO_API_KEY=你的 Generator API Key
+```
+
 ### 本地模型依赖
 
 本地模型模式除了 `requirements.txt` 里的依赖外，还需要安装 PyTorch。常见安装方式：

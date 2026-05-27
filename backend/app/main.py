@@ -2,11 +2,13 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.llm_client import LLMClient
+from app.api.routes.batch import router as batch_router
 from app.api.routes.generation import router as generation_router
 from app.api.routes.health import router as health_router
 from app.api.routes.personas import router as personas_router
 from app.api.routes.records import router as records_router
-from app.api.routes.batch import router as batch_router
+from app.api.routes.safety import router as safety_router
+from app.api.routes.safety_records import router as safety_records_router
 from app.core.config import Settings, get_settings
 from app.db.session import build_engine, build_session_factory, init_db
 from app.services.batch_session_service import BatchSessionService
@@ -16,6 +18,9 @@ from app.services.orchestration_service import OrchestrationService
 from app.services.persona_service import PersonaService
 from app.services.planner_service import PlannerService
 from app.services.record_service import RecordService
+from app.services.safe_reply_highlight_service import SafeReplyHighlightService
+from app.services.safety_record_service import SafetyRecordService
+from app.services.safety_service import SafetyService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -52,6 +57,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     record_service = RecordService()
     excel_service = ExcelService()
     batch_session_service = BatchSessionService()
+    safety_record_service = SafetyRecordService()
+    safe_reply_highlight_service = SafeReplyHighlightService(settings=settings)
+    safety_service = SafetyService(
+        settings=settings,
+        llm_client=llm_client,
+        session_maker=session_maker,
+        safety_record_service=safety_record_service,
+        safe_reply_highlight_service=safe_reply_highlight_service,
+    )
 
     app.state.settings = settings
     app.state.engine = engine
@@ -64,6 +78,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.record_service = record_service
     app.state.excel_service = excel_service
     app.state.batch_session_service = batch_session_service
+    app.state.safety_record_service = safety_record_service
+    app.state.safe_reply_highlight_service = safe_reply_highlight_service
+    app.state.safety_service = safety_service
 
     api_router = APIRouter(prefix=settings.api_v1_prefix)
     api_router.include_router(health_router)
@@ -71,6 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(generation_router)
     api_router.include_router(records_router)
     api_router.include_router(batch_router)
+    api_router.include_router(safety_router)
+    api_router.include_router(safety_records_router)
     app.include_router(api_router)
 
     return app

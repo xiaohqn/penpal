@@ -41,6 +41,15 @@ class ExcelService:
         return BatchExcelImportResponse(items=items, total=len(items))
 
     def export_records_excel(self, records: list[dict[str, Any]]) -> bytes:
+        """
+        输入：
+        - records：普通人格回信历史记录的完整字典列表。
+        输出：
+        - 返回一个包含普通人格记录明细的 Excel 二进制内容。
+        作用：
+        - 为历史记录页导出普通人格回信样本库提供统一的 Excel 生成能力。
+        """
+
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "consultation_records"
@@ -84,6 +93,58 @@ class ExcelService:
                     json.dumps(record.get("selected_style_config_json", {}), ensure_ascii=False),
                     json.dumps(record.get("planner_output_json", {}), ensure_ascii=False),
                     json.dumps(record.get("draft_candidates_json", []), ensure_ascii=False),
+                ]
+            )
+
+        output = io.BytesIO()
+        workbook.save(output)
+        return output.getvalue()
+
+    def export_safety_records_excel(self, records: list[dict[str, Any]]) -> bytes:
+        """
+        输入：
+        - records：安全回复历史记录的完整字典列表。
+        输出：
+        - 返回一个包含安全回复记录明细的 Excel 二进制内容。
+        作用：
+        - 为历史记录页导出安全回复样本库提供独立的 Excel 生成能力，便于后续 few-shot / RAG 整理。
+        """
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "safety_reply_records"
+
+        headers = [
+            "id",
+            "created_at",
+            "style_name",
+            "risk_labels_json",
+            "corrected_risk_labels_json",
+            "risk_reason",
+            "user_input",
+            "ai_safe_response",
+            "expert_polished_response",
+        ]
+        sheet.append(headers)
+
+        for record in records:
+            created_at = record.get("created_at")
+            if isinstance(created_at, datetime):
+                created_at_value = created_at.isoformat()
+            else:
+                created_at_value = str(created_at or "")
+
+            sheet.append(
+                [
+                    record.get("id", ""),
+                    created_at_value,
+                    record.get("style_name", ""),
+                    json.dumps(record.get("risk_labels_json", []), ensure_ascii=False),
+                    json.dumps(record.get("corrected_risk_labels_json", []), ensure_ascii=False),
+                    record.get("risk_reason", ""),
+                    record.get("user_input", ""),
+                    record.get("ai_safe_response", ""),
+                    record.get("expert_polished_response", ""),
                 ]
             )
 

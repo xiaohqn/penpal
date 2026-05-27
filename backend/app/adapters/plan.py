@@ -1,3 +1,12 @@
+"""
+输入：
+- 用户来信文本、人格配置、Planner / Generator 所需模型客户端，以及运行环境中的可选 API 配置。
+输出：
+- 返回人格风格配置、Planner 结果和最终回信，也提供一个仅用于本地手工演示的 `main()` 示例入口。
+作用：
+- 这个文件承载早期的多 agent 风格规划实验逻辑，供当前后端适配层复用部分人格与风格定义。
+  由于它也可能被单独运行，这里补充环境变量读取，避免示例代码把 API Key 写死在仓库中。
+"""
 import os
 import re
 import json
@@ -220,10 +229,25 @@ def run_multi_agent_pipeline(
 # 6. 测试运行
 # ==========================================
 def main():
+    """
+    输入：
+    - 当前环境中的 GPT API 配置，以及内置的示例来信文本。
+    输出：
+    - 在终端打印不同人格下的回信示例。
+    作用：
+    - 提供一个开发期的手工演示入口，帮助快速观察人格切换效果。
+      这里不参与生产接口调用，但保留时也应避免把敏感配置写死在代码里。
+    """
+
+    # 示例入口优先读取环境变量，避免开发调试代码在仓库里泄漏固定账号配置。
+    api_key = os.getenv("GPT_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("CHATGPT_API_KEY")
+    if not api_key:
+        raise ValueError("未找到 GPT API Key，请设置 GPT_API_KEY、OPENAI_API_KEY 或 CHATGPT_API_KEY")
+
     # 初始化客户端（由于架构解耦，你可以 Planner 用 GPT-4o，Generator 用 Doubao 等）
     client = OpenAI(
-        api_key="sk-t5X6hRwwJxuP7GjbC07PaGfgI1hMfGkxVXLTyMld83gQgm2g",
-        base_url="https://api.chatanywhere.tech/v1" 
+        api_key=api_key,
+        base_url=os.getenv("GPT_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "https://api.chatanywhere.tech/v1",
     )
     
     PLANNER_MODEL = "gpt-4o-mini"

@@ -9,6 +9,8 @@ from app.services.excel_service import ExcelService
 from app.services.orchestration_service import OrchestrationService
 from app.services.persona_service import PersonaService
 from app.services.record_service import RecordService
+from app.services.safety_record_service import SafetyRecordService
+from app.services.safety_service import SafetyService
 
 
 def get_settings(request: Request) -> Settings:
@@ -42,3 +44,11 @@ def get_excel_service(request: Request) -> ExcelService:
 
 def get_batch_session_service(request: Request) -> BatchSessionService:
     return request.app.state.batch_session_service
+
+
+def get_safety_record_service(request: Request) -> SafetyRecordService:
+    return request.app.state.safety_record_service
+
+
+def get_safety_service(request: Request) -> SafetyService:
+    return request.app.state.safety_service
