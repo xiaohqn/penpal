@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Highlighter, Plus } from "lucide-react";
 
 import type { SourceAnnotation } from "../features/records/types";
@@ -9,6 +10,7 @@ type Props = {
   annotations?: SourceAnnotation[];
   onAddAnnotation?: ((annotation: SourceAnnotation) => void) | null;
   onRemoveAnnotation?: ((annotationId: string) => void) | null;
+  sidePanel?: ReactNode;
 };
 
 function escapeHtml(value: string): string {
@@ -26,6 +28,7 @@ export function PolishingEditor({
   annotations = [],
   onAddAnnotation = null,
   onRemoveAnnotation = null,
+  sidePanel = null,
 }: Props) {
   const [annotationNote, setAnnotationNote] = useState("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; quote: string } | null>(null);
@@ -88,13 +91,16 @@ export function PolishingEditor({
         </p>
       </div>
 
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onSelect={handleSelection}
-        placeholder="选择一个草稿后，这里会自动带入内容，供继续润色。"
-        className="min-h-[360px] w-full rounded-[28px] border border-transparent bg-paper/72 px-5 py-5 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
-      />
+      <div className={`grid gap-4 ${sidePanel ? "xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]" : ""}`}>
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onSelect={handleSelection}
+          placeholder="选择一个草稿后，这里会自动带入内容，供继续润色。"
+          className="min-h-[360px] w-full rounded-[28px] border border-transparent bg-paper/72 px-5 py-5 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
+        />
+        {sidePanel ? <div className="xl:sticky xl:top-6 xl:self-start">{sidePanel}</div> : null}
+      </div>
 
       <section className="mt-5 rounded-[26px] border border-line bg-paper/68 p-4">
         <div className="flex items-center gap-2">
@@ -138,14 +144,20 @@ export function PolishingEditor({
           </div>
         ) : null}
 
-        <div className="mt-4 rounded-[22px] border border-line bg-white/82 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
-         
+        <details className="mt-4 rounded-[22px] border border-line bg-white/82 p-4">
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
+              <p className="text-xs text-ink/50">
+                {annotations.length > 0 ? `${annotations.length} 条批注，点击展开查看` : "暂无批注"}
+              </p>
+            </div>
+          </summary>
           <div
             className="mt-3 whitespace-pre-wrap text-sm leading-8 text-ink"
             dangerouslySetInnerHTML={{ __html: highlightedPreview || "暂无高亮批注。" }}
           />
-        </div>
+        </details>
 
         {annotations.length > 0 ? (
           <div className="mt-4 grid gap-3">

@@ -11,7 +11,7 @@ async def collect_stream(service: OrchestrationService):
     items = []
     async for chunk in service.stream_generation(
         user_input="我最近有些低落，但想试着往前走。",
-        persona_names=["温暖倾听者", "故事导师", "理性教练"],
+        persona_names=["温暖倾听者", "启发故事导师", "理性破局教练"],
     ):
         items.append(chunk)
     return "".join(items)
@@ -31,4 +31,4 @@ def test_orchestration_stream_completes_for_multiple_personas():
     output = asyncio.run(collect_stream(orchestration_service))
     assert "event: draft_started" in output
     assert "event: job_done" in output
-    assert "故事导师" in output
+    assert "启发故事导师" in output

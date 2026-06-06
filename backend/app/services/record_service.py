@@ -8,9 +8,13 @@ from app.schemas.record import (
     ConsultationRecordResponse,
     ConsultationRecordSaveRequest,
 )
+from app.services.rag_service import RagService
 
 
 class RecordService:
+    def __init__(self, rag_service: RagService | None = None):
+        self.rag_service = rag_service or RagService()
+
     def _derive_rag_ready(self, payload: ConsultationRecordSaveRequest) -> str:
         if payload.expert_annotation.strip() or payload.source_annotations:
             return "approved"
@@ -21,6 +25,13 @@ class RecordService:
         db: Session,
         payload: ConsultationRecordSaveRequest,
     ) -> ConsultationRecordResponse:
+        planner_labels = payload.planner_labels or self.rag_service.build_planner_labels(payload.planner_output)
+        sample_tags = payload.sample_tags or self.rag_service.build_sample_tags(
+            user_input=payload.user_input,
+            planner_output=payload.planner_output,
+            expert_annotation=payload.expert_annotation,
+            source_annotations=payload.source_annotations,
+        )
         record = ConsultationRecord(
             user_input=payload.user_input,
             selected_persona_name=payload.selected_persona_name,
@@ -32,6 +43,9 @@ class RecordService:
             expert_annotation=payload.expert_annotation,
             rag_ready=self._derive_rag_ready(payload),
             sample_reason=payload.sample_reason,
+            sample_tags_json=sample_tags,
+            planner_labels_json=planner_labels,
+            evaluation_json=payload.evaluation,
             sample_snapshot_json=payload.sample_snapshot,
             source_annotations_json=payload.source_annotations,
             response_versions_json=payload.response_versions,
@@ -66,6 +80,9 @@ class RecordService:
                 expert_annotation=record.expert_annotation,
                 rag_ready=record.rag_ready,
                 sample_reason=record.sample_reason,
+                sample_tags_json=record.sample_tags_json or {},
+                planner_labels_json=record.planner_labels_json or {},
+                evaluation_json=record.evaluation_json or {},
                 created_at=record.created_at,
                 updated_at=record.updated_at,
             )

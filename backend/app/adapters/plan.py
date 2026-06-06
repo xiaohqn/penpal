@@ -5,75 +5,13 @@ import time
 from typing import Dict, Any, Optional, List
 from openai import OpenAI
 
-# ==========================================
-# 1. 风格轴详细定义
-# ==========================================
-STYLE_AXES_DEF = {
-    "narrative": {
-        "无案例": "纯逻辑与理论分析，绝对不讲任何个人故事或他人经历，保持客观的论述视角。",
-        "轻案例": "作为点缀，简短提及一句相关的经验或普遍现象（如：‘我/我朋友也曾经历过类似阶段’），点到为止。",
-        "强故事": "必须用一段完整的亲身经历、他人故事或生动深刻的类比来作为核心切入点，用故事的起伏来传递力量。"
-    },
-    "advice": {
-        "概念启发": "不列点、不编号。不做具体实操指导，而是给出抽象的哲学探讨或生活态度建议，润物无声。",
-        "框架策略": "明确列出 1、2、3 点行动方向，条理清晰，为用户提供解决问题的宏观框架或原则。",
-        "微步实操": "将建议拆解为极度落地的微小目标，必须明确指出‘今晚’、‘明天’或‘下次课间’具体可以做的一个极小动作。"
-    },
-    "empathy": {
-        "理性克制": "点到为止的理解。承认用户的困难，但不做过多的情绪渲染，保持冷静、克制的第三方视角。",
-        "温和接纳": "明确表达理解与同理（如：‘我能感受到你的不容易’），提供稳定、温暖的心理支撑。",
-        "深度镜像": "极致共情，强烈共鸣。甚至需要替用户精准说出他们内心深处未曾明确表达出的委屈、恐惧与无力感。"
-    },
-    "cognitive": {
-        "顺应跟随": "顺应用户当前的逻辑与视角，不对其信念进行挑战。重点在于确认‘你会有这种想法是完全正常的’，主打心理抚慰。",
-        "认知解绑": "敏锐指出用户的逻辑谬误（如灾难化思维、将一次失败等同于个人毫无价值）。强行将‘问题’与‘个人的自我价值’剥离，引入颠覆性的新视角。"
-    }
-}
-
-# ==========================================
-# 2. 丰富的人格矩阵 (Persona Matrix)
-# ==========================================
-PERSONAS = {
-    "温暖倾听者": {"narrative": "轻案例", "advice": "自由叙述", "empathy": "强", "cognitive": "顺应跟随"},
-    "理性教练": {"narrative": "无案例", "advice": "分点计划", "empathy": "中", "cognitive": "认知解绑"},
-    "故事导师": {"narrative": "强故事", "advice": "时间轴", "empathy": "强", "cognitive": "顺应跟随"},
-    "犀利破局者": {"narrative": "无案例", "advice": "分点计划", "empathy": "弱", "cognitive": "认知解绑"},
-    "哲理长者": {"narrative": "强故事", "advice": "自由叙述", "empathy": "中", "cognitive": "顺应跟随"}
-}
-
-STYLE_VALUE_ALIASES = {
-    "advice": {
-        "自由叙述": "概念启发",
-        "分点计划": "框架策略",
-        "时间轴": "微步实操",
-    },
-    "empathy": {
-        "弱": "理性克制",
-        "中": "温和接纳",
-        "强": "深度镜像",
-    },
-}
-
-
-def normalize_style_value(axis: str, value: str) -> str:
-    if value in STYLE_AXES_DEF.get(axis, {}):
-        return value
-    return STYLE_VALUE_ALIASES.get(axis, {}).get(value, value)
-
-
-def get_persona_style_config(persona_name: str) -> Dict[str, str]:
-    raw_config = PERSONAS[persona_name]
-    resolved_config = {}
-    for axis, value in raw_config.items():
-        resolved_value = normalize_style_value(axis, value)
-        if resolved_value not in STYLE_AXES_DEF.get(axis, {}):
-            raise KeyError(f"人格 {persona_name} 的轴 {axis} 配置值 {value} 无法映射到 STYLE_AXES_DEF。")
-        resolved_config[axis] = resolved_value
-    return resolved_config
-
-
-def get_all_persona_names() -> List[str]:
-    return list(PERSONAS.keys())
+from app.adapters.persona_config import (
+    PERSONAS,
+    STYLE_AXES_DEF,
+    get_all_persona_names,
+    get_persona_style_config,
+    normalize_persona_name,
+)
 
 # ==========================================
 # 3. Agent 1: Planner 的 Prompt
@@ -147,7 +85,7 @@ def run_multi_agent_pipeline(
     user_letter: str, 
     persona_name: str
 ) -> Dict[str, Any]:
-    
+    persona_name = normalize_persona_name(persona_name)
     style_config = get_persona_style_config(persona_name)
     
     # --- Step 1: 触发 Planner Agent ---
@@ -222,7 +160,7 @@ def run_multi_agent_pipeline(
 def main():
     # 初始化客户端（由于架构解耦，你可以 Planner 用 GPT-4o，Generator 用 Doubao 等）
     client = OpenAI(
-        api_key="sk-t5X6hRwwJxuP7GjbC07PaGfgI1hMfGkxVXLTyMld83gQgm2g",
+        api_key=os.getenv("GPT_API_KEY", ""),
         base_url="https://api.chatanywhere.tech/v1" 
     )
     

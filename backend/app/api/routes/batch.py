@@ -204,16 +204,14 @@ async def regenerate_batch_session_item(
     if payload.expert_annotation.strip():
         augmented_user_input += f"\n\n【专家总体说明】\n{payload.expert_annotation.strip()}"
 
-    drafts = await orchestration_service.generate_all(
+    selected_draft = await orchestration_service.generate_from_plan(
         user_input=augmented_user_input,
-        persona_names=payload.selected_persona_names or [payload.selected_persona_name],
-    )
-    selected_draft = next(
-        (draft for draft in drafts if draft["persona_name"] == payload.selected_persona_name),
-        drafts[0] if drafts else None,
+        persona_name=payload.selected_persona_name,
+        planner_output=payload.planner_output or item.planner_output_json or {},
     )
     if selected_draft is None:
         raise HTTPException(status_code=400, detail="No draft generated")
+    drafts = [selected_draft]
 
     existing_versions = list(item.response_versions_json or [])
     version = {
@@ -235,7 +233,7 @@ async def regenerate_batch_session_item(
         planner_output=selected_draft.get("planner_output", {}),
         drafts=drafts,
         ai_selected_raw_response=selected_draft.get("raw_response", ""),
-        selected_persona_name=payload.selected_persona_name,
+        selected_persona_name=selected_draft["persona_name"],
         selected_persona_names=payload.selected_persona_names or [payload.selected_persona_name],
         selected_style_config=selected_draft.get("style_config", {}),
         source_annotations=[annotation.model_dump() for annotation in payload.source_annotations],

@@ -9,6 +9,7 @@ from app.services.excel_service import ExcelService
 from app.services.orchestration_service import OrchestrationService
 from app.services.persona_service import PersonaService
 from app.services.record_service import RecordService
+from app.services.rag_service import RagService
 
 
 def get_settings(request: Request) -> Settings:
@@ -42,3 +43,7 @@ def get_excel_service(request: Request) -> ExcelService:
 
 def get_batch_session_service(request: Request) -> BatchSessionService:
     return request.app.state.batch_session_service
+
+
+def get_rag_service(request: Request) -> RagService:
+    return request.app.state.rag_service

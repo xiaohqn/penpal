@@ -38,7 +38,7 @@ export function BatchExcelPanel({
   const progress = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
 
   return (
-    <aside className="rounded-panel border border-line bg-white/82 p-5 shadow-soft backdrop-blur xl:max-h-[calc(100vh-3rem)] xl:overflow-hidden">
+    <aside className="rounded-panel border border-line bg-white/82 p-5 shadow-soft backdrop-blur">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-mist px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-amber">
@@ -106,7 +106,7 @@ export function BatchExcelPanel({
       </div>
 
       {expanded ? (
-        <div className="mt-4 xl:max-h-[calc(100vh-23rem)] xl:overflow-auto xl:pr-1">
+        <div className="mt-4">
           {items.length > 0 ? (
             <div className="flex gap-3">
               <button
@@ -131,7 +131,7 @@ export function BatchExcelPanel({
           ) : null}
           {items.length > 0 ? (
             <div className="mt-4 grid gap-3">
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const isActive = item.row_number === activeRowNumber;
                 const isCompleted = completedRowNumbers.includes(item.row_number);
                 return (
@@ -146,7 +146,7 @@ export function BatchExcelPanel({
                     }`}
                   >
                     <div>
-                      <div className="text-sm font-medium text-ink">第 {item.row_number} 行</div>
+                      <div className="text-sm font-medium text-ink">第 {index + 1} 条</div>
                       <div className="mt-2 text-sm leading-6 text-ink/65">{item.user_input.slice(0, 84)}...</div>
                     </div>
                     <span

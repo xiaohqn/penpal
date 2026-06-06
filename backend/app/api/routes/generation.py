@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_orchestration_service
-from app.schemas.generation import GenerationRequest
+from app.schemas.generation import GenerateFromPlanRequest, GenerationRequest
 from app.services.orchestration_service import OrchestrationService
 
 router = APIRouter(prefix="/generations", tags=["generations"])
@@ -27,4 +27,17 @@ async def stream_generation(
         ),
         media_type="text/event-stream",
         headers=headers,
+    )
+
+
+@router.post("/from-plan")
+async def generate_from_plan(
+    payload: GenerateFromPlanRequest,
+    orchestration_service: OrchestrationService = Depends(get_orchestration_service),
+) -> dict:
+    return await orchestration_service.generate_from_plan(
+        user_input=payload.user_input,
+        persona_name=payload.persona_name,
+        planner_output=payload.planner_output,
+        source_mode=payload.source_mode,
     )

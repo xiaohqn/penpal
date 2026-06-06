@@ -20,8 +20,8 @@ def make_test_excel() -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["user_input", "selected_persona_names"])
-    sheet.append(["我最近压力很大，想找人说说。", "温暖倾听者,理性教练"])
-    sheet.append(["我总觉得自己快扛不住了。", "故事导师"])
+    sheet.append(["我最近压力很大，想找人说说。", "温暖倾听者,理性破局教练"])
+    sheet.append(["我总觉得自己快扛不住了。", "启发故事导师"])
 
     output = BytesIO()
     workbook.save(output)
@@ -78,5 +78,7 @@ def test_export_records_excel(tmp_path):
     assert rows[1][3] == payload["rag_ready"]
     assert rows[0][4] == "sample_reason"
     assert rows[1][4] == payload["sample_reason"]
-    assert rows[0][8] == "expert_annotation"
-    assert rows[1][8] == payload["expert_annotation"]
+    assert rows[0][5] == "sample_tags_json"
+    assert rows[0][6] == "planner_labels_json"
+    assert rows[0][10] == "expert_annotation"
+    assert rows[1][10] == payload["expert_annotation"]

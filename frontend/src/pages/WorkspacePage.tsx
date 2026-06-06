@@ -9,11 +9,17 @@ import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { PersonaSelector } from "../components/PersonaSelector";
 import { PlannerInsightAccordion } from "../components/PlannerInsightAccordion";
 import { PolishingEditor } from "../components/PolishingEditor";
+import {
+  EMPTY_EVALUATION,
+  normalizeResponseEvaluation,
+  ResponseEvaluationPanel,
+} from "../components/ResponseEvaluationPanel";
 import { ResponseVersionPanel } from "../components/ResponseVersionPanel";
 import { SaveRecordBar } from "../components/SaveRecordBar";
 import { ToneGuideBar } from "../components/ToneGuideBar";
 import { UserLetterPanel } from "../components/UserLetterPanel";
 import { useGenerationWorkspace, usePersonas } from "../features/generation/hooks";
+import type { DraftCandidate, PlannerOutput } from "../features/generation/types";
 import {
   useBatchSession,
   useBatchSessions,
@@ -27,6 +33,7 @@ import {
 import type {
   BatchSessionItem,
   ResponseVersion,
+  ResponseEvaluation,
   ReviewedBatchItem,
   SourceAnnotation,
 } from "../features/records/types";
@@ -50,6 +57,7 @@ function buildReviewedItems(items: BatchSessionItem[]): ReviewedBatchItem[] {
       rag_ready: item.rag_ready,
       sample_reason: item.sample_reason,
       source_annotations: item.source_annotations_json,
+      evaluation: (item.evaluation_json as ResponseEvaluation) ?? EMPTY_EVALUATION,
       active_version_index: item.active_version_index,
     }))
     .sort((a, b) => a.row_number - b.row_number);
@@ -66,6 +74,8 @@ export function WorkspacePage() {
     jobLoading,
     jobError,
     startGeneration,
+    generateDraftFromPlan,
+    updateDraftPlanner,
     resetWorkspace,
     hydrateWorkspace,
   } = useGenerationWorkspace();
@@ -101,6 +111,7 @@ export function WorkspacePage() {
         rag_ready: item.rag_ready,
         sample_reason: item.sample_reason,
         sample_snapshot_json: item.sample_snapshot_json,
+        evaluation_json: item.evaluation_json,
         source_annotations_json: item.source_annotations_json,
         response_versions_json: item.response_versions_json,
         active_version_index: item.active_version_index,
@@ -114,14 +125,15 @@ export function WorkspacePage() {
   const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
   const [polishedText, setPolishedText] = useState("");
   const [expertAnnotation, setExpertAnnotation] = useState("");
-  const [sampleReason, setSampleReason] = useState("");
   const [statusText, setStatusText] = useState<string | null>(null);
   const [batchFileName, setBatchFileName] = useState<string | null>(null);
   const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"single" | "batch">("single");
   const [generationSourceMode, setGenerationSourceMode] = useState<"auto" | "api" | "vllm" | "compare">("compare");
+  const [rightPanelMode, setRightPanelMode] = useState<"batch" | "evaluation">("batch");
   const [sourceAnnotations, setSourceAnnotations] = useState<SourceAnnotation[]>([]);
   const [responseVersions, setResponseVersions] = useState<ResponseVersion[]>([]);
+  const [responseEvaluation, setResponseEvaluation] = useState<ResponseEvaluation>(EMPTY_EVALUATION);
   const [activeVersionIndex, setActiveVersionIndex] = useState(0);
   const [lastHydratedDraft, setLastHydratedDraft] = useState<{
     personaName: string | null;
@@ -133,7 +145,7 @@ export function WorkspacePage() {
 
   const isBatchMode = batchItems.length > 0;
   const isWorkspaceBatchMode = workspaceMode === "batch";
-  const currentBatchItem = isBatchMode ? batchItems[batchCurrentIndex] ?? null : null;
+  const currentBatchItem = isWorkspaceBatchMode && isBatchMode ? batchItems[batchCurrentIndex] ?? null : null;
   const batchCompletedCount = batchItems.filter((item) => item.status === "completed").length;
   const batchAllCompleted = isBatchMode && batchCompletedCount === batchItems.length;
   const completedRowNumbers = batchItems.filter((item) => item.status === "completed").map((item) => item.row_number);
@@ -181,7 +193,9 @@ export function WorkspacePage() {
     setResponseVersions(currentBatchItem.response_versions_json ?? []);
     setActiveVersionIndex(currentBatchItem.active_version_index ?? 0);
     setExpertAnnotation(currentBatchItem.expert_annotation ?? "");
-    setSampleReason(currentBatchItem.sample_reason ?? "");
+    setResponseEvaluation(
+      normalizeResponseEvaluation((currentBatchItem.evaluation_json as ResponseEvaluation) ?? EMPTY_EVALUATION),
+    );
     setPolishedText(currentBatchItem.latest_response ?? "");
     setStatusText(
       currentBatchItem.status === "completed"
@@ -267,7 +281,6 @@ export function WorkspacePage() {
 
   function buildSampleSnapshot() {
     const normalizedExpertAnnotation = expertAnnotation.trim();
-    const normalizedSampleReason = sampleReason.trim();
     return {
       user_input: userInput,
       selected_persona_name: activeDraft?.persona_name ?? currentBatchItem?.selected_persona_name ?? selectedPersona ?? "",
@@ -275,7 +288,7 @@ export function WorkspacePage() {
       ai_selected_raw_response: activeDraft?.response ?? currentBatchItem?.ai_selected_raw_response ?? "",
       expert_polished_response: polishedText,
       expert_annotation: normalizedExpertAnnotation,
-      sample_reason: normalizedSampleReason,
+      evaluation: normalizeResponseEvaluation(responseEvaluation),
       source_annotations: sourceAnnotations,
       response_versions: responseVersions,
       active_version_index: activeVersionIndex,
@@ -288,6 +301,7 @@ export function WorkspacePage() {
 
   async function handleGenerate() {
     setStatusText(null);
+    setResponseEvaluation(EMPTY_EVALUATION);
     if (selectedPersonas.length === 0) {
       setStatusText("请先选择至少一种风格，再生成草稿。");
       return;
@@ -333,7 +347,10 @@ export function WorkspacePage() {
         latest_response: polishedText,
         expert_annotation: expertAnnotation,
         rag_ready: deriveRagReady(),
-        sample_reason: sampleReason,
+        sample_reason: "",
+        sample_tags: {},
+        planner_labels: {},
+        evaluation: normalizeResponseEvaluation(responseEvaluation),
         sample_snapshot: buildSampleSnapshot(),
         source_annotations: sourceAnnotations,
         response_versions: nextVersions,
@@ -381,7 +398,10 @@ export function WorkspacePage() {
       expert_polished_response: polishedText,
       expert_annotation: expertAnnotation,
       rag_ready: deriveRagReady(),
-      sample_reason: sampleReason,
+      sample_reason: "",
+      sample_tags: {},
+      planner_labels: {},
+      evaluation: normalizeResponseEvaluation(responseEvaluation),
       sample_snapshot: buildSampleSnapshot(),
       source_annotations: sourceAnnotations,
       response_versions: nextVersions,
@@ -487,6 +507,7 @@ export function WorkspacePage() {
           setResponseVersions([...existingVersions, nextVersion]);
           setActiveVersionIndex(nextVersion.version_index);
           setPolishedText(selectedDraft.response);
+          setResponseEvaluation(EMPTY_EVALUATION);
           setSelectedPersona(selectedDraft.draft_id);
           setStatusText("已基于 AI 回复高亮批注重新生成，并新增一条可回退的回复版本。");
         }
@@ -502,6 +523,7 @@ export function WorkspacePage() {
           source_annotations: sourceAnnotations,
           expert_annotation: expertAnnotation,
           current_response: polishedText,
+          planner_output: activeDraft?.planner_output ?? currentBatchItem.planner_output_json ?? {},
         },
       });
 
@@ -523,11 +545,111 @@ export function WorkspacePage() {
         setResponseVersions(updatedItem.response_versions_json ?? []);
         setActiveVersionIndex(updatedItem.active_version_index ?? 0);
         setPolishedText(updatedItem.latest_response ?? polishedText);
+        setResponseEvaluation(EMPTY_EVALUATION);
         setStatusText("已基于 AI 回复高亮批注重新生成，并新增一条可回退的回复版本。");
       }
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "批注重生成失败");
     }
+  }
+
+  function handlePlannerChange(plannerOutput: PlannerOutput) {
+    if (!activeDraft) {
+      return;
+    }
+    updateDraftPlanner(activeDraft.draft_id, plannerOutput);
+    setStatusText("已应用 Planner 修改，可按修改后的 Planner 重生成全文。");
+  }
+
+  async function handleRegenerateFromPlanner(plannerOutput: PlannerOutput) {
+    if (!activeDraft) {
+      setStatusText("请先选择一份草稿。");
+      return;
+    }
+
+    try {
+      if (!currentBatchItem) {
+        const selectedDraft = await generateDraftFromPlan({
+          user_input: userInput,
+          persona_name: activeDraft.persona_name,
+          planner_output: plannerOutput,
+          source_mode: generationSourceMode,
+        });
+        appendPlannerRegeneratedVersion(selectedDraft, plannerOutput);
+        setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
+        return;
+      }
+
+      const detail = await regenerateBatchSessionItem.mutateAsync({
+        sessionId: currentBatchItem.session_id as number,
+        itemId: currentBatchItem.id as number,
+        payload: {
+          selected_persona_name: activeDraft.persona_name,
+          selected_persona_names: selectedPersonas.length > 0 ? selectedPersonas : [activeDraft.persona_name],
+          source_annotations: sourceAnnotations,
+          expert_annotation: expertAnnotation,
+          current_response: polishedText,
+          planner_output: plannerOutput,
+        },
+      });
+      const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
+      if (updatedItem) {
+        hydrateWorkspace({
+          drafts: updatedItem.draft_candidates_json.map((draft) => ({
+            draft_id: String(draft.draft_id ?? `${String(draft.persona_name ?? "")}::${String(draft.source ?? "api")}`),
+            persona_name: String(draft.persona_name ?? ""),
+            source: String(draft.source ?? "api"),
+            source_label: String(draft.source_label ?? "API 模型"),
+            style_config: (draft.style_config ?? {}) as Record<string, string>,
+            planner_output: (draft.planner_output ?? {}) as Record<string, unknown>,
+            response: String(draft.response ?? ""),
+            raw_response: String(draft.raw_response ?? ""),
+          })),
+          selectedPersona: String(updatedItem.draft_candidates_json[0]?.draft_id ?? "") || selectedPersona,
+        });
+        setResponseVersions(updatedItem.response_versions_json ?? []);
+        setActiveVersionIndex(updatedItem.active_version_index ?? 0);
+        setPolishedText(updatedItem.latest_response ?? polishedText);
+        setResponseEvaluation(EMPTY_EVALUATION);
+        setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
+      }
+    } catch (error) {
+      setStatusText(error instanceof Error ? error.message : "按 Planner 重生成失败");
+    }
+  }
+
+  function appendPlannerRegeneratedVersion(selectedDraft: DraftCandidate, plannerOutput: PlannerOutput) {
+    const existingVersions =
+      responseVersions.length > 0
+        ? responseVersions
+        : [
+            {
+              version_index: 0,
+              label: "专家当前版本",
+              response: polishedText,
+              selected_persona_name: activeDraft?.persona_name ?? "未标记风格",
+              created_at: new Date().toISOString(),
+              source: "manual",
+              source_annotations: sourceAnnotations,
+            },
+          ];
+
+    const nextVersion = {
+      version_index: existingVersions.length,
+      label: `Planner 重生成 v${existingVersions.length + 1}`,
+      response: selectedDraft.response,
+      selected_persona_name: selectedDraft.persona_name,
+      created_at: new Date().toISOString(),
+      source: "planner_regenerate",
+      source_annotations: sourceAnnotations,
+    };
+
+    updateDraftPlanner(selectedDraft.draft_id, selectedDraft.planner_output as PlannerOutput);
+    setResponseVersions([...existingVersions, nextVersion]);
+    setActiveVersionIndex(nextVersion.version_index);
+    setPolishedText(selectedDraft.response);
+    setResponseEvaluation(EMPTY_EVALUATION);
+    setSelectedPersona(selectedDraft.draft_id);
   }
 
   async function handleRollbackVersion(versionIndex: number) {
@@ -540,6 +662,7 @@ export function WorkspacePage() {
       setPolishedText(version.response);
       setSelectedPersona(version.selected_persona_name);
       setSourceAnnotations(version.source_annotations ?? []);
+      setResponseEvaluation(EMPTY_EVALUATION);
       setStatusText(`已回退到版本 ${versionIndex + 1}。`);
       return;
     }
@@ -556,6 +679,7 @@ export function WorkspacePage() {
         setPolishedText(updatedItem.latest_response ?? polishedText);
         setSelectedPersonas(updatedItem.selected_persona_names_json ?? selectedPersonas);
         setSourceAnnotations(updatedItem.source_annotations_json ?? sourceAnnotations);
+        setResponseEvaluation(EMPTY_EVALUATION);
         setStatusText(`已回退到版本 ${versionIndex + 1}。`);
       }
     } catch (error) {
@@ -648,6 +772,14 @@ export function WorkspacePage() {
               </button>
               <button
                 type="button"
+                onClick={() => setRightPanelMode("evaluation")}
+                disabled={!activeDraft && !polishedText.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-5 py-3 text-sm text-ink transition hover:bg-paper/85 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                评价当前回复
+              </button>
+              <button
+                type="button"
                 onClick={handleRegenerateFromAnnotations}
                 disabled={!currentBatchItem || regenerateBatchSessionItem.isPending}
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-5 py-3 text-sm text-ink transition hover:bg-paper/85 disabled:cursor-not-allowed disabled:opacity-45"
@@ -715,7 +847,12 @@ export function WorkspacePage() {
 
             <DraftStreamTabs drafts={drafts} selectedPersona={selectedPersona} onSelect={setSelectedPersona} />
 
-            <PlannerInsightAccordion plannerOutput={activeDraft?.planner_output} />
+            <PlannerInsightAccordion
+              plannerOutput={activeDraft?.planner_output}
+              onChange={handlePlannerChange}
+              onRegenerate={handleRegenerateFromPlanner}
+              regenerating={jobLoading || regenerateBatchSessionItem.isPending}
+            />
 
             <section className="grid gap-5 rounded-panel border border-line bg-white/76 p-6 shadow-soft">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -740,12 +877,10 @@ export function WorkspacePage() {
                 onAddAnnotation={handleAddSourceAnnotation}
                 onRemoveAnnotation={handleRemoveSourceAnnotation}
               />
-      <ExpertAnnotationPanel
-        value={expertAnnotation}
-        onChange={setExpertAnnotation}
-        sampleReason={sampleReason}
-        onSampleReasonChange={setSampleReason}
-      />
+              <ExpertAnnotationPanel
+                value={expertAnnotation}
+                onChange={setExpertAnnotation}
+              />
               <ResponseVersionPanel
                 versions={responseVersions}
                 activeVersionIndex={activeVersionIndex}
@@ -766,8 +901,39 @@ export function WorkspacePage() {
             </section>
           </div>
 
-          {isWorkspaceBatchMode ? (
-            <div className="grid gap-6">
+          <div className="grid gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
+            {isWorkspaceBatchMode ? (
+              <div className="inline-flex rounded-full border border-line bg-white/72 p-1">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelMode("batch")}
+                  className={`rounded-full px-4 py-2 text-sm transition ${
+                    rightPanelMode === "batch" ? "bg-amber text-white" : "text-ink/72"
+                  }`}
+                >
+                  批量任务
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelMode("evaluation")}
+                  className={`rounded-full px-4 py-2 text-sm transition ${
+                    rightPanelMode === "evaluation" ? "bg-amber text-white" : "text-ink/72"
+                  }`}
+                >
+                  评价模块
+                </button>
+              </div>
+            ) : null}
+
+            {rightPanelMode === "evaluation" || !isWorkspaceBatchMode ? (
+              <ResponseEvaluationPanel
+                value={responseEvaluation}
+                onChange={setResponseEvaluation}
+                defaultOpen
+              />
+            ) : null}
+
+            {isWorkspaceBatchMode && rightPanelMode === "batch" ? (
               <BatchExcelPanel
                 importing={importBatchExcel.isPending || batchSessions.isLoading}
                 fileName={batchFileName}
@@ -781,8 +947,8 @@ export function WorkspacePage() {
                 onPrevious={() => goToBatchIndex(batchCurrentIndex - 1)}
                 onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
               />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
       </div>

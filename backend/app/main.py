@@ -7,6 +7,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.personas import router as personas_router
 from app.api.routes.records import router as records_router
 from app.api.routes.batch import router as batch_router
+from app.api.routes.rag import router as rag_router
 from app.core.config import Settings, get_settings
 from app.db.session import build_engine, build_session_factory, init_db
 from app.services.batch_session_service import BatchSessionService
@@ -16,6 +17,7 @@ from app.services.orchestration_service import OrchestrationService
 from app.services.persona_service import PersonaService
 from app.services.planner_service import PlannerService
 from app.services.record_service import RecordService
+from app.services.rag_service import RagService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -44,14 +46,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     persona_service = PersonaService()
     planner_service = PlannerService(settings=settings, llm_client=llm_client)
     generator_service = GeneratorService(settings=settings, llm_client=llm_client)
+    rag_service = RagService(
+        seed_path=settings.rag_seed_path,
+        seed_enabled=settings.rag_seed_enabled,
+    )
     orchestration_service = OrchestrationService(
         settings=settings,
         planner_service=planner_service,
         generator_service=generator_service,
+        rag_service=rag_service,
+        session_maker=session_maker,
     )
-    record_service = RecordService()
+    record_service = RecordService(rag_service=rag_service)
     excel_service = ExcelService()
-    batch_session_service = BatchSessionService()
+    batch_session_service = BatchSessionService(rag_service=rag_service)
 
     app.state.settings = settings
     app.state.engine = engine
@@ -61,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.planner_service = planner_service
     app.state.generator_service = generator_service
     app.state.orchestration_service = orchestration_service
+    app.state.rag_service = rag_service
     app.state.record_service = record_service
     app.state.excel_service = excel_service
     app.state.batch_session_service = batch_session_service
@@ -71,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(generation_router)
     api_router.include_router(records_router)
     api_router.include_router(batch_router)
+    api_router.include_router(rag_router)
     app.include_router(api_router)
 
     return app

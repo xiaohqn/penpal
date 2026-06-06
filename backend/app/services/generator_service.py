@@ -63,7 +63,7 @@ class GeneratorService:
             raw = await self.llm_client.complete_local(
                 model_path=local_model_path,
                 messages=generator_messages,
-                temperature=0.7,
+                temperature=0.55,
                 max_new_tokens=self.settings.local_generator_max_new_tokens,
             )
         elif mode == "vllm":
@@ -73,14 +73,14 @@ class GeneratorService:
                 provider="vllm",
                 model=self.settings.vllm_model_name,
                 messages=generator_messages,
-                temperature=0.7,
+                temperature=0.55,
             )
         else:
             raw = await self.llm_client.complete_api(
                 provider="doubao",
                 model=self.settings.generator_model,
                 messages=generator_messages,
-                temperature=0.7,
+                temperature=0.55,
             )
         response, _ = parse_response_only(raw)
         return {"raw": raw, "response": response}
@@ -105,10 +105,8 @@ class GeneratorService:
         persona_name = style_summary["persona_name"]
         opener_map = {
             "温暖倾听者": "你好，我先想认真地告诉你，你现在这么累，并不是因为你不够好，而是你真的已经撑了很久。",
-            "理性教练": "你好，你现在的混乱感并不等于你没有能力，更像是压力已经超出了你一个人硬扛的范围。",
-            "故事导师": "你好，读完你的来信，我想到很多人在成长里都会遇到某个突然失重的阶段，你现在就在这样的阶段里。",
-            "犀利破局者": "你好，先把一件事说清楚：眼前的困局很重，但它不是对你价值的宣判。",
-            "哲理长者": "你好，人被难处压住的时候，最容易把一时的阴影误当成整片天空，而你现在最需要的，是有人陪你把天色重新看清。",
+            "理性破局教练": "你好，先把一件事说清楚：你现在遇到的不是“你这个人不行”，而是问题缠在一起之后，让你暂时看不清从哪里下手。",
+            "启发故事导师": "你好，读完你的来信，我更想和你一起看见：这件事表面上很乱，里面其实藏着一个可以重新选择的入口。",
         }
         action_line = {
             "概念启发": "这两天先别逼自己一下子想通所有事，只需要把最重的那件事写成两三句，给它一个名字。",
@@ -119,10 +117,10 @@ class GeneratorService:
         advice_style = style_summary["advice"]
         intro = opener_map.get(persona_name, opener_map["温暖倾听者"])
         body = (
-            "你信里那种又想撑住、又快撑不住的感觉，我能理解。很多时候，真正把人压垮的，不只是事情本身，而是长期没有被看见、没有地方安放的紧绷。"
+            "你信里那种又想撑住、又快撑不住的感觉，我能理解。真正需要被看见的，也许不只是那件具体的事，而是你明明还想把生活过好，却一直缺少一个能帮你把问题拆开的支点。"
         )
         reframe = (
-            "所以现在更重要的，不是证明自己够不够坚强，而是把问题和你这个人分开看。你在经历困难，这不等于你就是失败的。"
+            "所以现在更重要的，不是证明自己够不够坚强，而是把问题和你这个人分开看。你在经历困难，这不等于你就是失败的；你需要的是更清楚的边界、更具体的话术，以及一点点重新拿回掌控感的机会。"
         )
         safety = ""
         if has_risk:

@@ -1,4 +1,5 @@
-from app.adapters.planner_actor_adapter import STYLE_AXES_DEF, build_persona_catalog
+from app.adapters.persona_config import STYLE_AXES_DEF
+from app.adapters.planner_actor_adapter import build_persona_catalog
 from app.schemas.persona import PersonaCatalogResponse
 
 

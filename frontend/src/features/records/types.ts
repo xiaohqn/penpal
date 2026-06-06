@@ -1,3 +1,17 @@
+export type EvaluationScores = {
+  intent_safety?: number;
+  authentic_empathy?: number;
+  grounded_guidance?: number;
+  narrative_companionship?: number;
+};
+
+export type ResponseEvaluation = {
+  rubric_version: string;
+  scores: EvaluationScores;
+  total_score?: number;
+  average_score?: number;
+};
+
 export type RecordItem = {
   id: number;
   user_input: string;
@@ -28,6 +42,9 @@ export type RecordDetail = {
   expert_annotation: string;
   rag_ready: string;
   sample_reason: string;
+  sample_tags_json: Record<string, unknown>;
+  planner_labels_json: Record<string, unknown>;
+  evaluation_json: ResponseEvaluation | Record<string, unknown>;
   sample_snapshot_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -45,6 +62,7 @@ export type SaveRecordPayload = {
   rag_ready?: string;
   sample_reason?: string;
   sample_snapshot?: Record<string, unknown>;
+  evaluation?: ResponseEvaluation;
   source_annotations?: SourceAnnotation[];
   response_versions?: ResponseVersion[];
   batch_session_id?: number | null;
@@ -66,6 +84,9 @@ export type BatchExcelItem = {
   expert_annotation?: string;
   source_annotations_json?: SourceAnnotation[];
   response_versions_json?: ResponseVersion[];
+  sample_tags_json?: Record<string, unknown>;
+  planner_labels_json?: Record<string, unknown>;
+  evaluation_json?: ResponseEvaluation | Record<string, unknown>;
   active_version_index?: number;
   status?: string;
   record_id?: number | null;
@@ -86,6 +107,7 @@ export type ReviewedBatchItem = {
   rag_ready?: string;
   sample_reason?: string;
   source_annotations?: SourceAnnotation[];
+  evaluation?: ResponseEvaluation;
   active_version_index?: number;
 };
 
@@ -127,6 +149,9 @@ export type BatchSessionItem = {
   sample_snapshot_json: Record<string, unknown>;
   source_annotations_json: SourceAnnotation[];
   response_versions_json: ResponseVersion[];
+  sample_tags_json: Record<string, unknown>;
+  planner_labels_json: Record<string, unknown>;
+  evaluation_json: ResponseEvaluation | Record<string, unknown>;
   active_version_index: number;
   record_id: number | null;
   created_at: string;
@@ -174,6 +199,9 @@ export type BatchSessionItemUpdatePayload = {
   expert_annotation: string;
   rag_ready: string;
   sample_reason: string;
+  sample_tags: Record<string, unknown>;
+  planner_labels: Record<string, unknown>;
+  evaluation: ResponseEvaluation;
   sample_snapshot: Record<string, unknown>;
   source_annotations: SourceAnnotation[];
   response_versions: ResponseVersion[];
@@ -188,4 +216,5 @@ export type BatchSessionItemRegeneratePayload = {
   source_annotations: SourceAnnotation[];
   expert_annotation: string;
   current_response: string;
+  planner_output?: Record<string, unknown>;
 };
