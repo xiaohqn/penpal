@@ -51,6 +51,21 @@ class GenerationRequest(BaseModel):
         return normalized
 
 
+class GenerateFromPlanRequest(BaseModel):
+    user_input: str = Field(min_length=1, max_length=8000)
+    persona_name: str = Field(min_length=1)
+    planner_output: dict[str, Any] = Field(default_factory=dict)
+    source_mode: str = "auto"
+
+    @field_validator("source_mode")
+    @classmethod
+    def validate_source_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"auto", "api", "vllm", "mock"}:
+            raise ValueError("source_mode must be one of: auto, api, vllm, mock")
+        return normalized
+
+
 class StreamEvent(BaseModel):
     event: str
     draft_id: str | None = None

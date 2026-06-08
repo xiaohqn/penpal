@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "app.db"
+DEFAULT_RAG_SEED_PATH = PROJECT_ROOT.parent / "data" / "seed.json"
 
 
 class Settings(BaseSettings):
@@ -61,6 +62,8 @@ class Settings(BaseSettings):
     mock_llm: bool = True
     stream_chunk_size: int = 28
     stream_chunk_delay_ms: int = 15
+    rag_seed_path: str = str(DEFAULT_RAG_SEED_PATH)
+    rag_seed_enabled: bool = True
 
     @field_validator("cors_origins", mode="before")
     @classmethod

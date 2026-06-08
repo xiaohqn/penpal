@@ -15,6 +15,9 @@ class ConsultationRecordSaveRequest(BaseModel):
     expert_annotation: str = ""
     rag_ready: str = "pending"
     sample_reason: str = ""
+    sample_tags: dict[str, Any] = Field(default_factory=dict)
+    planner_labels: dict[str, Any] = Field(default_factory=dict)
+    evaluation: dict[str, Any] = Field(default_factory=dict)
     sample_snapshot: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
     response_versions: list[dict[str, Any]] = Field(default_factory=list)
@@ -57,6 +60,9 @@ class ConsultationRecordResponse(BaseModel):
     expert_annotation: str
     rag_ready: str
     sample_reason: str
+    sample_tags_json: dict[str, Any]
+    planner_labels_json: dict[str, Any]
+    evaluation_json: dict[str, Any]
     sample_snapshot_json: dict[str, Any]
     source_annotations_json: list[dict[str, Any]]
     response_versions_json: list[dict[str, Any]]
@@ -73,6 +79,9 @@ class ConsultationRecordListItem(BaseModel):
     expert_annotation: str
     rag_ready: str
     sample_reason: str
+    sample_tags_json: dict[str, Any]
+    planner_labels_json: dict[str, Any]
+    evaluation_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
@@ -115,6 +124,9 @@ class ReviewedBatchItem(BaseModel):
     expert_annotation: str = ""
     rag_ready: str = "pending"
     sample_reason: str = ""
+    sample_tags: dict[str, Any] = Field(default_factory=dict)
+    planner_labels: dict[str, Any] = Field(default_factory=dict)
+    evaluation: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
     active_version_index: int = 0
 
@@ -177,6 +189,9 @@ class BatchSessionItemDetail(BaseModel):
     expert_annotation: str
     rag_ready: str
     sample_reason: str
+    sample_tags_json: dict[str, Any]
+    planner_labels_json: dict[str, Any]
+    evaluation_json: dict[str, Any]
     sample_snapshot_json: dict[str, Any]
     source_annotations_json: list[dict[str, Any]]
     response_versions_json: list[dict[str, Any]]
@@ -210,6 +225,9 @@ class BatchSessionItemUpdateRequest(BaseModel):
     expert_annotation: str = ""
     rag_ready: str = "pending"
     sample_reason: str = ""
+    sample_tags: dict[str, Any] = Field(default_factory=dict)
+    planner_labels: dict[str, Any] = Field(default_factory=dict)
+    evaluation: dict[str, Any] = Field(default_factory=dict)
     sample_snapshot: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
     response_versions: list[dict[str, Any]] = Field(default_factory=list)
@@ -224,6 +242,7 @@ class BatchSessionItemRegenerateRequest(BaseModel):
     source_annotations: list[SourceAnnotationNote] = Field(default_factory=list)
     expert_annotation: str = ""
     current_response: str = ""
+    planner_output: dict[str, Any] = Field(default_factory=dict)
 
 
 class BatchSessionItemRollbackRequest(BaseModel):

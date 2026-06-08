@@ -45,20 +45,33 @@ class PlannerService:
         )
 
         return {
-            "intent_analysis": (
-                "用户正在承受持续情绪压力，希望被理解，同时需要一个更稳的解释框架和下一步行动抓手。"
-            ),
+            "intention": "用户正在承受持续情绪压力，希望被理解，也希望有人帮自己看清困局并找到下一步。",
+            "surface_issue": "来信者描述了学习、人际、家庭或情绪上的具体困扰。",
+            "core_issue": "真正需要处理的是压力之下的自我价值感受损、掌控感下降，以及不知道如何把求助和行动落到具体场景。",
+            "positive_motive": "来信者愿意写信，本身说明仍然想把生活过好，也在寻找一个更安全、更有效的办法。",
+            "wrong_but_easy_answer": "不要只复述痛苦，也不要只给泛泛的学习计划、沟通建议或空洞鼓励。",
             "risk_assessment": risk_assessment,
+            "value_guidance": "把问题和个人价值分开；遇到危险念头时，求助是保护自己，不是添麻烦。",
             "persona_strategy": (
                 f"以{style_summary['persona_name']}的风格写作，突出"
                 f"{style_summary['empathy']}式共情、{style_summary['advice']}式建议与"
                 f"{style_summary['cognitive']}式认知介入。"
             ),
-            "paragraph_plan": [
-                "第一段先接住情绪，准确命名痛苦与疲惫感。",
-                "第二段解释痛苦并不等于个人有问题，把处境和自我价值分开。",
-                "第三段给出一到两个足够小、当天就能尝试的动作。",
-                "第四段在结尾补充陪伴承诺；若有风险，则明确鼓励联系专业支持。",
+            "response_focus": "先看见来信者仍想把生活过好的正面动机，再把问题和自我价值分开，最后落到一个具体可尝试的小动作。",
+            "story_plan": {
+                "use_story": style_summary["narrative"] == "启发故事",
+                "story_type": "真实人物故事/学生近似案例" if style_summary["narrative"] == "启发故事" else "不讲故事",
+                "story_candidate": "选择一个能说明“暂时受挫不等于能力定型”的简短故事或类比" if style_summary["narrative"] == "启发故事" else "",
+                "story_point": "故事必须帮助来信者看到另一种处理方式，而不是复述同样的烦恼。",
+                "transfer_to_user": "把故事里的选择迁移成来信者当下可以尝试的一句话或一个动作。",
+            },
+            "action_strategy": [
+                "先把最重的问题命名出来，而不是一次解决所有问题。",
+                "找到一个可信任的大人、老师或同伴，用一句话开启求助。",
+            ],
+            "sample_words": [
+                "我最近真的有点扛不住，想请你先听我说十分钟。",
+                "我不是不想变好，我是现在不知道从哪一步开始。",
             ],
             "must_include": [
                 "明确回应用户并不是矫情或软弱",

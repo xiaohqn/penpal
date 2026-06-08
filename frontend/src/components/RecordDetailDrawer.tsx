@@ -38,14 +38,28 @@ export function RecordDetailDrawer({ record }: Props) {
             <div className="mt-2 whitespace-pre-wrap">{record.expert_annotation || "暂无批注"}</div>
           </section>
           <section className="rounded-3xl bg-paper/70 p-4">
+            <strong>回复评分</strong>
+            <div className="mt-2 whitespace-pre-wrap">
+              {JSON.stringify(record.evaluation_json ?? {}, null, 2)}
+            </div>
+          </section>
+          <section className="rounded-3xl bg-paper/70 p-4">
             <strong>沉淀状态</strong>
             <div className="mt-2 whitespace-pre-wrap">
               {record.rag_ready === "approved" ? "已记录处理过程与满意版本" : "当前主要保存了最终版本，尚未形成完整批注沉淀"}
             </div>
           </section>
           <section className="rounded-3xl bg-paper/70 p-4">
-            <strong>补充说明</strong>
-            <div className="mt-2 whitespace-pre-wrap">{record.sample_reason || "暂无补充说明"}</div>
+            <strong>样本标签</strong>
+            <div className="mt-2 whitespace-pre-wrap">
+              {JSON.stringify(record.sample_tags_json ?? {}, null, 2)}
+            </div>
+          </section>
+          <section className="rounded-3xl bg-paper/70 p-4">
+            <strong>Planner 标签</strong>
+            <div className="mt-2 whitespace-pre-wrap">
+              {JSON.stringify(record.planner_labels_json ?? {}, null, 2)}
+            </div>
           </section>
         </div>
       ) : (

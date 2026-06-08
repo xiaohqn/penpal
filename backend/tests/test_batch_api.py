@@ -20,8 +20,8 @@ def make_test_excel() -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["user_input", "selected_persona_names"])
-    sheet.append(["我最近压力很大，想找人说说。", "温暖倾听者,理性教练"])
-    sheet.append(["我总觉得自己快扛不住了。", "故事导师"])
+    sheet.append(["我最近压力很大，想找人说说。", "温暖倾听者,理性破局教练"])
+    sheet.append(["我总觉得自己快扛不住了。", "启发故事导师"])
 
     output = BytesIO()
     workbook.save(output)
@@ -39,8 +39,8 @@ def test_batch_import_excel(tmp_path):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["total"] == 2
-    assert payload["items"][0]["selected_persona_names"] == []
+    assert payload["total_items"] == 2
+    assert payload["items"][0]["selected_persona_names_json"] == []
 
 
 def test_export_records_excel(tmp_path):
@@ -78,8 +78,10 @@ def test_export_records_excel(tmp_path):
     assert rows[1][3] == payload["rag_ready"]
     assert rows[0][4] == "sample_reason"
     assert rows[1][4] == payload["sample_reason"]
-    assert rows[0][8] == "expert_annotation"
-    assert rows[1][8] == payload["expert_annotation"]
+    assert rows[0][5] == "sample_tags_json"
+    assert rows[0][6] == "planner_labels_json"
+    assert rows[0][16] == "expert_annotation"
+    assert rows[1][16] == payload["expert_annotation"]
 
 
 def test_batch_regenerate_keeps_first_ai_reply_as_original_response(tmp_path):
@@ -140,23 +142,26 @@ def test_batch_regenerate_keeps_first_ai_reply_as_original_response(tmp_path):
     )
     assert update_response.status_code == 200
 
-    async def fake_generate_all(user_input: str, persona_names: list[str]):
+    async def fake_generate_from_plan(
+        user_input: str,
+        persona_name: str,
+        planner_output: dict[str, object],
+    ):
         assert "【当前 AI 回复】" in user_input
-        assert persona_names == ["温暖倾听者"]
-        return [
-            {
-                "draft_id": "温暖倾听者::api",
-                "persona_name": "温暖倾听者",
-                "source": "api",
-                "source_label": "API 模型",
-                "style_config": {"persona_name": "温暖倾听者"},
-                "planner_output": {"generation_plan": "按批注重写"},
-                "response": "这是批注重生成后的新版本，请联系班主任和家长。",
-                "raw_response": "这是批注重生成后的新版本，请联系班主任和家长。",
-            }
-        ]
+        assert persona_name == "温暖倾听者"
+        assert planner_output == {"generation_plan": "先共情，再给现实建议"}
+        return {
+            "draft_id": "温暖倾听者::api",
+            "persona_name": "温暖倾听者",
+            "source": "api",
+            "source_label": "API 模型",
+            "style_config": {"persona_name": "温暖倾听者"},
+            "planner_output": {"generation_plan": "按批注重写"},
+            "response": "这是批注重生成后的新版本，请联系班主任和家长。",
+            "raw_response": "这是批注重生成后的新版本，请联系班主任和家长。",
+        }
 
-    client.app.state.orchestration_service.generate_all = fake_generate_all
+    client.app.state.orchestration_service.generate_from_plan = fake_generate_from_plan
 
     regenerate_response = client.post(
         f"/api/v1/batch/sessions/{session_id}/items/{item_id}/regenerate",

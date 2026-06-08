@@ -2,11 +2,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from sqlalchemy.orm import sessionmaker
+
 from app.adapters.planner_actor_adapter import build_style_summary, normalize_persona_name
 from app.core.config import Settings
 from app.core.sse import format_sse
 from app.services.generator_service import GeneratorService
 from app.services.planner_service import PlannerService
+from app.services.rag_service import RagService
 
 
 class OrchestrationService:
@@ -15,10 +18,14 @@ class OrchestrationService:
         settings: Settings,
         planner_service: PlannerService,
         generator_service: GeneratorService,
+        rag_service: RagService | None = None,
+        session_maker: sessionmaker | None = None,
     ):
         self.settings = settings
         self.planner_service = planner_service
         self.generator_service = generator_service
+        self.rag_service = rag_service or RagService()
+        self.session_maker = session_maker
 
     async def stream_generation(
         self,
@@ -50,6 +57,11 @@ class OrchestrationService:
             )
             try:
                 planner_output = await self.planner_service.create_plan(user_input, persona_name)
+                planner_output = self._attach_rag_references(
+                    user_input=user_input,
+                    persona_name=persona_name,
+                    planner_output=planner_output,
+                )
                 await queue.put(
                     {
                         "event": "planner_ready",
@@ -170,6 +182,11 @@ class OrchestrationService:
         async def worker(persona_name: str, target: dict[str, str]) -> dict[str, Any] | None:
             try:
                 planner_output = await self.planner_service.create_plan(user_input, persona_name)
+                planner_output = self._attach_rag_references(
+                    user_input=user_input,
+                    persona_name=persona_name,
+                    planner_output=planner_output,
+                )
                 draft_result = await self.generator_service.generate_with_mode(
                     user_input=user_input,
                     planner_output=planner_output,
@@ -193,6 +210,37 @@ class OrchestrationService:
             *(worker(persona_name, target) for persona_name in ordered_personas for target in generator_targets)
         )
         return [item for item in results if item is not None]
+
+    async def generate_from_plan(
+        self,
+        user_input: str,
+        persona_name: str,
+        planner_output: dict[str, Any],
+        source_mode: str = "auto",
+    ) -> dict[str, Any]:
+        normalized_persona = normalize_persona_name(persona_name)
+        target = self._build_generator_targets(False, source_mode)[0]
+        enriched_planner_output = self._attach_rag_references(
+            user_input=user_input,
+            persona_name=normalized_persona,
+            planner_output=planner_output,
+        )
+        draft_result = await self.generator_service.generate_with_mode(
+            user_input=user_input,
+            planner_output=enriched_planner_output,
+            persona_name=normalized_persona,
+            mode=target["mode"],
+        )
+        return {
+            "draft_id": self._build_draft_id(normalized_persona, target["source"]),
+            "persona_name": normalized_persona,
+            "source": target["source"],
+            "source_label": target["label"],
+            "style_config": build_style_summary(normalized_persona),
+            "planner_output": enriched_planner_output,
+            "response": draft_result["response"],
+            "raw_response": draft_result["raw"],
+        }
 
     def _build_generator_targets(self, compare_sources: bool, source_mode: str) -> list[dict[str, str]]:
         normalized_mode = source_mode.strip().lower()
@@ -223,3 +271,29 @@ class OrchestrationService:
 
     def _build_draft_id(self, persona_name: str, source: str) -> str:
         return f"{persona_name}::{source}"
+
+    def _attach_rag_references(
+        self,
+        user_input: str,
+        persona_name: str,
+        planner_output: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.session_maker is None:
+            return planner_output
+        db = self.session_maker()
+        try:
+            samples = self.rag_service.retrieve_samples(
+                db=db,
+                user_input=user_input,
+                planner_output=planner_output,
+                persona_name=persona_name,
+                limit=2,
+            )
+        finally:
+            db.close()
+        if not samples:
+            return planner_output
+        return {
+            **planner_output,
+            "rag_references": [sample.to_prompt_block() for sample in samples],
+        }

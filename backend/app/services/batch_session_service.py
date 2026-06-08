@@ -16,6 +16,7 @@ from app.schemas.record import (
     BatchSessionListItem,
     BatchSessionListResponse,
 )
+from app.services.rag_service import RagService
 
 
 def utc_iso() -> str:
@@ -23,6 +24,27 @@ def utc_iso() -> str:
 
 
 class BatchSessionService:
+    """
+    输入：
+    - 数据库会话、批量任务请求载荷，以及可选的 `RagService` 用于生成标签与衍生字段。
+    输出：
+    - 返回批量任务详情、条目详情和版本回退后的最新持久化状态。
+    作用：
+    - 统一管理批量任务会话、单条记录更新、回复版本追加和版本回退，同时保证首版原始回复不会被后续重生成覆盖。
+    """
+
+    def __init__(self, rag_service: RagService | None = None):
+        """
+        输入：
+        - rag_service：可选的 RAG 辅助服务；未传入时会创建默认实例。
+        输出：
+        - 初始化批量任务服务内部依赖。
+        作用：
+        - 让批量任务在更新时既能生成样本标签，也能复用测试环境或应用级共享的 `RagService`。
+        """
+
+        self.rag_service = rag_service or RagService()
+
     def _preserve_original_raw_response(
         self,
         existing_response: str,
@@ -152,6 +174,14 @@ class BatchSessionService:
         item.expert_annotation = payload.expert_annotation
         item.rag_ready = self._derive_rag_ready(payload.expert_annotation, payload.source_annotations)
         item.sample_reason = payload.sample_reason
+        item.planner_labels_json = payload.planner_labels or self.rag_service.build_planner_labels(payload.planner_output)
+        item.sample_tags_json = payload.sample_tags or self.rag_service.build_sample_tags(
+            user_input=item.user_input,
+            planner_output=payload.planner_output,
+            expert_annotation=payload.expert_annotation,
+            source_annotations=payload.source_annotations,
+        )
+        item.evaluation_json = payload.evaluation
         item.sample_snapshot_json = payload.sample_snapshot
         item.source_annotations_json = payload.source_annotations
         item.response_versions_json = payload.response_versions
@@ -195,6 +225,7 @@ class BatchSessionService:
         item.selected_style_config_json = selected_style_config
         item.source_annotations_json = source_annotations
         item.expert_annotation = expert_annotation
+        item.evaluation_json = {}
         item.status = "in_progress"
         self._refresh_session_progress(db, item.session_id, preferred_current_item_id=item.id)
         db.commit()
@@ -282,6 +313,9 @@ class BatchSessionService:
             expert_annotation=item.expert_annotation,
             rag_ready=item.rag_ready,
             sample_reason=item.sample_reason,
+            sample_tags_json=item.sample_tags_json or {},
+            planner_labels_json=item.planner_labels_json or {},
+            evaluation_json=item.evaluation_json or {},
             sample_snapshot_json=item.sample_snapshot_json or {},
             source_annotations_json=item.source_annotations_json or [],
             response_versions_json=item.response_versions_json or [],

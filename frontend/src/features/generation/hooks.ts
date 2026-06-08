@@ -1,8 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
-import { fetchPersonaCatalog, streamGenerations } from "./api";
-import type { DraftCandidate, DraftState } from "./types";
+import { fetchPersonaCatalog, generateFromPlan, streamGenerations } from "./api";
+import type { DraftCandidate, DraftState, PlannerOutput } from "./types";
 
 export function usePersonas() {
   return useQuery({
@@ -148,6 +148,34 @@ export function useGenerationWorkspace() {
     },
   });
 
+  const planMutation = useMutation({
+    mutationFn: async (payload: {
+      user_input: string;
+      persona_name: string;
+      planner_output: PlannerOutput;
+      source_mode?: string;
+    }) => {
+      setJobLoading(true);
+      setJobError(null);
+      const draft = await generateFromPlan(payload);
+      setDrafts((current) => ({
+        ...current,
+        [draft.draft_id]: {
+          ...draft,
+          raw_response: draft.raw_response ?? "",
+          status: "done",
+        },
+      }));
+      setSelectedPersona(draft.draft_id);
+      setJobLoading(false);
+      return draft;
+    },
+    onError: (error) => {
+      setJobLoading(false);
+      setJobError(error instanceof Error ? error.message : "按 Planner 重生成失败");
+    },
+  });
+
   const orderedDrafts = Object.values(drafts);
   const activeDraft =
     orderedDrafts.find((item) => item.draft_id === selectedPersona) ?? orderedDrafts[0] ?? null;
@@ -177,6 +205,22 @@ export function useGenerationWorkspace() {
     [],
   );
 
+  const updateDraftPlanner = useCallback((draftId: string, plannerOutput: PlannerOutput) => {
+    setDrafts((current) => {
+      const existing = current[draftId];
+      if (!existing) {
+        return current;
+      }
+      return {
+        ...current,
+        [draftId]: {
+          ...existing,
+          planner_output: plannerOutput,
+        },
+      };
+    });
+  }, []);
+
   return {
     drafts: orderedDrafts,
     activeDraft,
@@ -185,6 +229,8 @@ export function useGenerationWorkspace() {
     jobLoading,
     jobError,
     startGeneration: mutation.mutateAsync,
+    generateDraftFromPlan: planMutation.mutateAsync,
+    updateDraftPlanner,
     resetWorkspace,
     hydrateWorkspace,
   };

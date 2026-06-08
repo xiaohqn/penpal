@@ -60,6 +60,14 @@ class ExcelService:
             "selected_persona_name",
             "rag_ready",
             "sample_reason",
+            "sample_tags_json",
+            "planner_labels_json",
+            "evaluation_total",
+            "evaluation_intent_safety",
+            "evaluation_authentic_empathy",
+            "evaluation_grounded_guidance",
+            "evaluation_narrative_companionship",
+            "evaluation_json",
             "user_input",
             "ai_selected_raw_response",
             "expert_polished_response",
@@ -77,6 +85,8 @@ class ExcelService:
                 created_at_value = created_at.isoformat()
             else:
                 created_at_value = str(created_at or "")
+            evaluation = record.get("evaluation_json", {}) or {}
+            scores = evaluation.get("scores", {}) or {}
 
             sheet.append(
                 [
@@ -85,6 +95,14 @@ class ExcelService:
                     record.get("selected_persona_name", ""),
                     record.get("rag_ready", ""),
                     record.get("sample_reason", ""),
+                    json.dumps(record.get("sample_tags_json", {}), ensure_ascii=False),
+                    json.dumps(record.get("planner_labels_json", {}), ensure_ascii=False),
+                    evaluation.get("total_score", ""),
+                    scores.get("intent_safety", ""),
+                    scores.get("authentic_empathy", ""),
+                    scores.get("grounded_guidance", ""),
+                    scores.get("narrative_companionship", ""),
+                    json.dumps(evaluation, ensure_ascii=False),
                     record.get("user_input", ""),
                     record.get("ai_selected_raw_response", ""),
                     record.get("expert_polished_response", ""),
@@ -212,12 +230,20 @@ class ExcelService:
             "selected_persona_name",
             "rag_ready",
             "sample_reason",
+            "evaluation_total",
+            "evaluation_intent_safety",
+            "evaluation_authentic_empathy",
+            "evaluation_grounded_guidance",
+            "evaluation_narrative_companionship",
+            "evaluation_json",
             "final_response",
             "expert_annotation",
         ]
         sheet.append(headers)
 
         for item in items:
+            evaluation = item.get("evaluation", {}) or {}
+            scores = evaluation.get("scores", {}) or {}
             sheet.append(
                 [
                     item.get("row_number", ""),
@@ -225,6 +251,12 @@ class ExcelService:
                     item.get("selected_persona_name", ""),
                     item.get("rag_ready", ""),
                     item.get("sample_reason", ""),
+                    evaluation.get("total_score", ""),
+                    scores.get("intent_safety", ""),
+                    scores.get("authentic_empathy", ""),
+                    scores.get("grounded_guidance", ""),
+                    scores.get("narrative_companionship", ""),
+                    json.dumps(evaluation, ensure_ascii=False),
                     item.get("final_response", ""),
                     item.get("expert_annotation", ""),
                 ]

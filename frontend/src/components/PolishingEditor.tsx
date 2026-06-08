@@ -5,12 +5,14 @@
  * - annotations / onAddAnnotation / onRemoveAnnotation：可选的高亮批注数据与操作回调。
  * - eyebrow / title / placeholder：可选的文案覆盖项，用于在不同业务场景下复用同一套编辑器。
  * - showAnnotations：控制是否显示“AI 回复高亮批注”区域。
+ * - sidePanel：可选的并排侧栏内容，用于把评价或补充信息固定在编辑区旁边。
  * 输出：
  * - 渲染一个可编辑的大文本润色区域，并在需要时附带高亮批注能力。
  * 作用：
  * - 这个组件统一承载“专家对 AI 初稿做人工编辑”的交互，既能服务普通人格草稿，也能服务安全回复场景。
  */
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Highlighter, Plus } from "lucide-react";
 
 import type { SourceAnnotation } from "../features/records/types";
@@ -25,6 +27,7 @@ type Props = {
   title?: string;
   placeholder?: string;
   showAnnotations?: boolean;
+  sidePanel?: ReactNode;
 };
 
 function escapeHtml(value: string): string {
@@ -46,6 +49,7 @@ export function PolishingEditor({
   title = "专家润色区",
   placeholder = "选择一个草稿后，这里会自动带入内容，供继续润色。",
   showAnnotations = true,
+  sidePanel = null,
 }: Props) {
   const [annotationNote, setAnnotationNote] = useState("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; quote: string } | null>(null);
@@ -108,13 +112,20 @@ export function PolishingEditor({
         </p>
       </div>
 
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onSelect={handleSelection}
-        placeholder={placeholder}
-        className="min-h-[360px] w-full rounded-[28px] border border-transparent bg-paper/72 px-5 py-5 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
-      />
+      <div
+        className={`grid gap-4 ${
+          sidePanel ? "xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]" : ""
+        }`}
+      >
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onSelect={handleSelection}
+          placeholder={placeholder}
+          className="min-h-[360px] w-full rounded-[28px] border border-transparent bg-paper/72 px-5 py-5 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
+        />
+        {sidePanel ? <div className="xl:sticky xl:top-6 xl:self-start">{sidePanel}</div> : null}
+      </div>
 
       {showAnnotations ? (
         <section className="mt-5 rounded-[26px] border border-line bg-paper/68 p-4">
@@ -159,13 +170,20 @@ export function PolishingEditor({
             </div>
           ) : null}
 
-          <div className="mt-4 rounded-[22px] border border-line bg-white/82 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
+          <details className="mt-4 rounded-[22px] border border-line bg-white/82 p-4">
+            <summary className="cursor-pointer list-none">
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
+                <p className="text-xs text-ink/50">
+                  {annotations.length > 0 ? `${annotations.length} 条批注，点击展开查看` : "暂无批注"}
+                </p>
+              </div>
+            </summary>
             <div
               className="mt-3 whitespace-pre-wrap text-sm leading-8 text-ink"
               dangerouslySetInnerHTML={{ __html: highlightedPreview || "暂无高亮批注。" }}
             />
-          </div>
+          </details>
 
           {annotations.length > 0 ? (
             <div className="mt-4 grid gap-3">
