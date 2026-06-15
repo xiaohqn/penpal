@@ -9,7 +9,12 @@
  * - 让最近一次“不安全来信”的安全回复链路可以跨页面刷新恢复，避免前端内存被清空后丢失人工处理进度。
  */
 import type { SourceAnnotation } from "../records/types";
-import type { SafetyCheckResponse, SafetyResponseCandidate } from "./types";
+import type { SafetyResponseVersion } from "../safety-records/types";
+import type {
+  SafetyCheckResponse,
+  SafetyDialogueEvaluation,
+  SafetyResponseCandidate,
+} from "./types";
 
 export type PersistedSafetyWorkspaceState = {
   version: 1;
@@ -22,11 +27,17 @@ export type PersistedSafetyWorkspaceState = {
   initialSafetyResponsesBySource: Record<string, string>;
   safetySourceAnnotations: SourceAnnotation[];
   safetyExpertAnnotation: string;
+  safetyResponseVersions: SafetyResponseVersion[];
+  safetyDialogueEvaluation: SafetyDialogueEvaluation;
   isSafetyPolishVisible: boolean;
   viewMode: "workspace" | "safety";
 };
 
 const STORAGE_KEY = "penpal/safety-workspace";
+const EMPTY_SAFETY_DIALOGUE_EVALUATION: SafetyDialogueEvaluation = {
+  rubric_version: "safety_dialogue_v1",
+  scores: {},
+};
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -71,6 +82,35 @@ function isSourceAnnotation(value: unknown): value is SourceAnnotation {
     typeof annotation.quote === "string" &&
     typeof annotation.note === "string" &&
     typeof annotation.color === "string"
+  );
+}
+
+function isSafetyResponseVersion(value: unknown): value is SafetyResponseVersion {
+  /**
+   * 输入：
+   * - 任意待校验值。
+   * 输出：
+   * - 返回该值是否满足安全回复版本历史的结构约束。
+   * 作用：
+   * - 确保刷新恢复安全工作台时，版本历史字段不会因为旧缓存或脏数据而破坏页面状态。
+   */
+
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const version = value as Partial<SafetyResponseVersion>;
+  return (
+    typeof version.version_index === "number" &&
+    typeof version.label === "string" &&
+    typeof version.response === "string" &&
+    typeof version.selected_response_source === "string" &&
+    typeof version.selected_response_source_label === "string" &&
+    typeof version.created_at === "string" &&
+    typeof version.source === "string" &&
+    typeof version.expert_annotation === "string" &&
+    Array.isArray(version.source_annotations) &&
+    version.source_annotations.every((item) => isSourceAnnotation(item))
   );
 }
 
@@ -144,6 +184,29 @@ function isSafetyCheckResponse(value: unknown): value is SafetyCheckResponse {
   );
 }
 
+function isSafetyDialogueEvaluation(value: unknown): value is SafetyDialogueEvaluation {
+  /**
+   * 输入：
+   * - 任意待校验值。
+   * 输出：
+   * - 返回该值是否满足安全对话评价对象的结构约束。
+   * 作用：
+   * - 让旧版 localStorage 快照在没有评分字段时也能平滑恢复，同时阻止脏数据污染页面状态。
+   */
+
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const evaluation = value as Partial<SafetyDialogueEvaluation>;
+  return (
+    typeof evaluation.rubric_version === "string" &&
+    typeof evaluation.scores === "object" &&
+    evaluation.scores !== null &&
+    !Array.isArray(evaluation.scores)
+  );
+}
+
 export function loadPersistedSafetyWorkspace(): PersistedSafetyWorkspaceState | null {
   /**
    * 输入：
@@ -180,6 +243,11 @@ export function loadPersistedSafetyWorkspace(): PersistedSafetyWorkspaceState | 
       Array.isArray(parsed.safetySourceAnnotations) &&
       parsed.safetySourceAnnotations.every((item) => isSourceAnnotation(item)) &&
       typeof parsed.safetyExpertAnnotation === "string" &&
+      (parsed.safetyResponseVersions === undefined ||
+        (Array.isArray(parsed.safetyResponseVersions) &&
+          parsed.safetyResponseVersions.every((item) => isSafetyResponseVersion(item)))) &&
+      (parsed.safetyDialogueEvaluation === undefined ||
+        isSafetyDialogueEvaluation(parsed.safetyDialogueEvaluation)) &&
       typeof parsed.isSafetyPolishVisible === "boolean" &&
       (parsed.viewMode === "workspace" || parsed.viewMode === "safety");
 
@@ -192,6 +260,8 @@ export function loadPersistedSafetyWorkspace(): PersistedSafetyWorkspaceState | 
       initialSafetyResponsesBySource: parsed.initialSafetyResponsesBySource ?? {},
       safetySourceAnnotations: parsed.safetySourceAnnotations ?? [],
       safetyExpertAnnotation: parsed.safetyExpertAnnotation ?? "",
+      safetyResponseVersions: parsed.safetyResponseVersions ?? [],
+      safetyDialogueEvaluation: parsed.safetyDialogueEvaluation ?? EMPTY_SAFETY_DIALOGUE_EVALUATION,
     };
   } catch {
     window.localStorage.removeItem(STORAGE_KEY);

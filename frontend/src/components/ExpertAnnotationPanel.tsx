@@ -23,7 +23,7 @@ export function ExpertAnnotationPanel({
   return (
     <section className="rounded-[28px] border border-line bg-white/78 p-6 shadow-soft">
       <div className="mb-4">
-        <p className="text-sm uppercase tracking-[0.22em] text-moss">专家批注</p>
+        <p className="text-sm uppercase tracking-[0.22em] text-moss">整体修改说明</p>
         <h2 className="mt-2 font-serif text-3xl text-ink">记录修改理由与判断依据</h2>
         <p className="mt-2 text-sm leading-7 text-ink/68">
           这里适合写风格判断、风险提醒、为什么替换某些句子，后续导出 Excel 也会带上这部分。
@@ -39,7 +39,7 @@ export function ExpertAnnotationPanel({
         <div className="mt-5 rounded-[24px] border border-line bg-paper/65 p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-ink/45">沉淀说明</p>
           <p className="mt-2 text-sm leading-7 text-ink/68">
-            只要你在本条中留下专家批注或回复高亮批注，系统就会自动记录处理过程和最终满意版本，为后续 RAG 样本整理做准备。
+            只要你在本条中留下整体修改说明或回复片段批注，系统就会自动记录处理过程和最终满意版本，为后续 RAG 样本整理做准备。
           </p>
           <textarea
             value={sampleReason}

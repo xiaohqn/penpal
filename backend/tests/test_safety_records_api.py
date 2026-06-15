@@ -53,6 +53,52 @@ def test_safety_record_create_and_fetch(tmp_path):
         "risk_reason": "来信中出现了明确的轻生表达。",
         "ai_safe_response": "谢谢你愿意把这些说出来，你现在的安全最重要。",
         "expert_polished_response": "谢谢你把这些告诉我。你现在的安全最重要，我们先一起确保你身边有人支持。",
+        "selected_response_source": "api",
+        "selected_response_source_label": "API 安全回复",
+        "safe_response_candidates": [
+            {
+                "source": "api",
+                "source_label": "API 安全回复",
+                "intent": "先稳住安全，再推动现实求助。",
+                "safe_response": "谢谢你愿意把这些说出来，你现在的安全最重要。",
+                "safe_highlight_segments": ["你现在的安全最重要"],
+                "safe_highlight_source": "llm",
+            }
+        ],
+        "expert_annotation": "我补强了现实求助对象和一句更能落地的建议。",
+        "sample_snapshot": {
+            "selected_response_source": "api",
+            "response_versions": [
+                {
+                    "version_index": 0,
+                    "label": "专家当前版本",
+                    "response": "谢谢你把这些告诉我。你现在的安全最重要，我们先一起确保你身边有人支持。",
+                }
+            ],
+        },
+        "source_annotations": [
+            {
+                "id": "annotation-1",
+                "start": 0,
+                "end": 7,
+                "quote": "你现在的安全最重要",
+                "note": "这里需要保留，并补一句现实支持对象。",
+                "color": "amber",
+            }
+        ],
+        "response_versions": [
+            {
+                "version_index": 0,
+                "label": "专家当前版本",
+                "response": "谢谢你把这些告诉我。你现在的安全最重要，我们先一起确保你身边有人支持。",
+                "selected_response_source": "api",
+                "selected_response_source_label": "API 安全回复",
+                "created_at": "2026-05-28T10:00:00+00:00",
+                "source": "manual",
+                "expert_annotation": "我补强了现实求助对象和一句更能落地的建议。",
+                "source_annotations": [],
+            }
+        ],
     }
 
     create_response = client.post("/api/v1/safety-records", json=payload)
@@ -71,6 +117,12 @@ def test_safety_record_create_and_fetch(tmp_path):
     assert detail_payload["risk_labels_json"] == payload["risk_labels"]
     assert detail_payload["corrected_risk_labels_json"] == payload["corrected_risk_labels"]
     assert detail_payload["expert_polished_response"] == payload["expert_polished_response"]
+    assert detail_payload["selected_response_source"] == payload["selected_response_source"]
+    assert detail_payload["selected_response_source_label"] == payload["selected_response_source_label"]
+    assert detail_payload["expert_annotation"] == payload["expert_annotation"]
+    assert detail_payload["source_annotations_json"][0]["note"] == payload["source_annotations"][0]["note"]
+    assert detail_payload["response_versions_json"][0]["label"] == payload["response_versions"][0]["label"]
+    assert detail_payload["safe_response_candidates_json"][0]["source"] == payload["safe_response_candidates"][0]["source"]
 
 
 def test_safety_record_delete(tmp_path):
@@ -142,10 +194,14 @@ def test_safety_record_export_excel(tmp_path):
     rows = list(sheet.iter_rows(values_only=True))
 
     assert rows[0][2] == "style_name"
-    assert rows[0][3] == "risk_labels_json"
-    assert rows[0][4] == "corrected_risk_labels_json"
-    assert rows[0][7] == "ai_safe_response"
+    assert rows[0][3] == "selected_response_source_label"
+    assert rows[0][4] == "risk_labels_json"
+    assert rows[0][5] == "corrected_risk_labels_json"
+    assert rows[0][8] == "ai_safe_response"
+    assert rows[0][10] == "expert_annotation"
+    assert rows[0][11] == "source_annotations_json"
+    assert rows[0][12] == "response_versions_json"
     assert rows[1][2] == "安全"
-    assert "自杀倾向" in str(rows[1][3])
-    assert rows[1][7] == payload["ai_safe_response"]
-    assert rows[1][8] == payload["expert_polished_response"]
+    assert "自杀倾向" in str(rows[1][4])
+    assert rows[1][8] == payload["ai_safe_response"]
+    assert rows[1][9] == payload["expert_polished_response"]

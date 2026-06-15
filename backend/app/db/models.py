@@ -153,11 +153,11 @@ class SafetyReplyRecord(Base):
     """
     输入：
     - 来自安全回复工作流的原始来信、模型识别出的风险类型、人工修正后的风险类型、风险原因、
-      原始安全回复与专家润色后的安全回复。
+      原始安全回复与专家润色后的安全回复，以及安全回复候选、专家批注、划词批注和版本历史等过程数据。
     输出：
     - 在 `safety_reply_records` 表中持久化一条安全回复记录。
     作用：
-    - 为高风险来信建立独立的安全回复样本库，避免与普通人格回信记录混在一起。
+    - 为高风险来信建立独立的安全回复样本库，并尽量保留接近普通对话历史页的完整处理过程。
     """
 
     __tablename__ = "safety_reply_records"
@@ -170,6 +170,13 @@ class SafetyReplyRecord(Base):
     risk_reason: Mapped[str] = mapped_column(Text, nullable=False)
     ai_safe_response: Mapped[str] = mapped_column(Text, nullable=False)
     expert_polished_response: Mapped[str] = mapped_column(Text, nullable=False)
+    selected_response_source: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    selected_response_source_label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    safe_response_candidates_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    expert_annotation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sample_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    source_annotations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    response_versions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

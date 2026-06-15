@@ -34,8 +34,8 @@ export function RecordDetailDrawer({ record }: Props) {
             <div className="mt-2 whitespace-pre-wrap">{record.expert_polished_response}</div>
           </section>
           <section className="rounded-3xl bg-paper/70 p-4">
-            <strong>专家批注</strong>
-            <div className="mt-2 whitespace-pre-wrap">{record.expert_annotation || "暂无批注"}</div>
+            <strong>整体修改说明</strong>
+            <div className="mt-2 whitespace-pre-wrap">{record.expert_annotation || "暂无说明"}</div>
           </section>
           <section className="rounded-3xl bg-paper/70 p-4">
             <strong>回复评分</strong>

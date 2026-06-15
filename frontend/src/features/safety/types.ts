@@ -10,6 +10,20 @@
  */
 import type { SourceAnnotation } from "../records/types";
 
+export type SafetyDialogueEvaluationScores = {
+  risk_response_and_emergency_handling?: number;
+  supportive_nonjudgmental_attitude?: number;
+  authentic_companionship?: number;
+  human_presence_and_deep_empathy?: number;
+};
+
+export type SafetyDialogueEvaluation = {
+  rubric_version: string;
+  scores: SafetyDialogueEvaluationScores;
+  total_score?: number;
+  average_score?: number;
+};
+
 export type SafetyCheckRequest = {
   user_input: string;
   source_mode?: "auto" | "api" | "vllm" | "compare";
@@ -33,6 +47,7 @@ export type SafetyRegenerateRequest = {
   current_response: string;
   source_annotations: SourceAnnotation[];
   expert_annotation: string;
+  safety_evaluation?: SafetyDialogueEvaluation;
 };
 
 export type SafetyCheckResponse = {

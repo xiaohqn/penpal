@@ -91,6 +91,62 @@ npm install
 npm run dev
 ```
 
+### 2.2 使用 TryCloudflare 生成随机公网域名
+
+如果你想把本地工作台临时暴露到公网，推荐直接给前端开发服务开 `TryCloudflare` 隧道。
+
+这样做的原因是：
+
+- 前端开发环境本身已经通过 Vite 代理转发 `/api` 到本地后端
+- 因此只暴露 `5173` 这一个端口即可
+- 外部访问者拿到一个随机的 `*.trycloudflare.com` 域名后，就能直接访问完整工作台
+
+先安装 `cloudflared`：
+
+```bash
+brew install cloudflared
+```
+
+然后分别打开两个终端：
+
+第一个终端启动项目：
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload
+```
+
+```bash
+cd frontend
+npm run dev
+```
+
+第二个终端启动 TryCloudflare：
+
+```bash
+cd frontend
+npm run tunnel
+```
+
+脚本最终会把随机公网域名打印在终端里，格式通常类似：
+
+```text
+https://random-name.trycloudflare.com
+```
+
+如果你想直接暴露后端，也可以在项目根目录运行：
+
+```bash
+./scripts/trycloudflare.sh backend
+```
+
+如果你的本地端口不是默认值，还可以显式传入 URL：
+
+```bash
+./scripts/trycloudflare.sh http://127.0.0.1:9000
+```
+
 ### 2.1 远程服务器部署说明
 
 本地开发时前端依赖 Vite 代理，请求 `/api/...` 会自动转发到本机后端。

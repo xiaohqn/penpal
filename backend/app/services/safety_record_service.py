@@ -18,6 +18,7 @@ from app.schemas.safety_record import (
     SafetyReplyRecordListResponse,
     SafetyReplyRecordResponse,
     SafetyReplyRecordSaveRequest,
+    hydrate_safety_reply_record_response,
 )
 
 
@@ -46,6 +47,12 @@ class SafetyRecordService:
         - 把一次安全回复结果固化为可复查、可复用的历史样本。
         """
 
+        sample_snapshot = dict(payload.sample_snapshot)
+        if payload.safety_evaluation:
+            # 安全对话评分暂时复用过程快照承载，避免为单个评价扩展引入数据库迁移；
+            # 响应层会再把它提升为 `safety_evaluation` 字段，供前端详情页直接展示。
+            sample_snapshot["safety_evaluation"] = payload.safety_evaluation
+
         record = SafetyReplyRecord(
             style_name="安全",
             user_input=payload.user_input,
@@ -54,11 +61,18 @@ class SafetyRecordService:
             risk_reason=payload.risk_reason,
             ai_safe_response=payload.ai_safe_response,
             expert_polished_response=payload.expert_polished_response,
+            selected_response_source=payload.selected_response_source,
+            selected_response_source_label=payload.selected_response_source_label,
+            safe_response_candidates_json=payload.safe_response_candidates,
+            expert_annotation=payload.expert_annotation,
+            sample_snapshot_json=sample_snapshot,
+            source_annotations_json=payload.source_annotations,
+            response_versions_json=payload.response_versions,
         )
         db.add(record)
         db.commit()
         db.refresh(record)
-        return SafetyReplyRecordResponse.model_validate(record)
+        return hydrate_safety_reply_record_response(record)
 
     def list_records(
         self,
@@ -116,7 +130,7 @@ class SafetyRecordService:
         record = db.get(SafetyReplyRecord, record_id)
         if record is None:
             return None
-        return SafetyReplyRecordResponse.model_validate(record)
+        return hydrate_safety_reply_record_response(record)
 
     def delete_record(self, db: Session, record_id: int) -> bool:
         """
@@ -150,7 +164,7 @@ class SafetyRecordService:
         records = db.scalars(
             select(SafetyReplyRecord).order_by(desc(SafetyReplyRecord.created_at))
         ).all()
-        return [SafetyReplyRecordResponse.model_validate(record).model_dump() for record in records]
+        return [hydrate_safety_reply_record_response(record).model_dump() for record in records]
 
     @dataclass(frozen=True)
     class FewShotExample:

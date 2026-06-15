@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build": "sh ./scripts/build-with-system-node.sh",
+    "preview": "vite preview",
+    "tunnel": "bash ../scripts/trycloudflare.sh frontend"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.1",

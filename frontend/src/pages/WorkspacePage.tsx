@@ -25,6 +25,10 @@ import {
   normalizeResponseEvaluation,
   ResponseEvaluationPanel,
 } from "../components/ResponseEvaluationPanel";
+import {
+  EMPTY_SAFETY_DIALOGUE_EVALUATION,
+  normalizeSafetyDialogueEvaluation,
+} from "../components/SafetyDialogueEvaluationPanel";
 import { ResponseVersionPanel } from "../components/ResponseVersionPanel";
 import { SafetyCheckBar } from "../components/SafetyCheckBar";
 import { SafetyResultPanel } from "../components/SafetyResultPanel";
@@ -44,6 +48,7 @@ import {
   useUpdateBatchSessionItem,
 } from "../features/records/hooks";
 import { useSaveSafetyRecord } from "../features/safety-records/hooks";
+import type { SafetyResponseVersion } from "../features/safety-records/types";
 import { useRegenerateSafetyReply, useSafetyCheck } from "../features/safety/hooks";
 import {
   clearPersistedSafetyWorkspace,
@@ -53,6 +58,7 @@ import {
 import type {
   SafetyCheckResponse,
   SafetyRegenerateRequest,
+  SafetyDialogueEvaluation,
   SafetyResponseCandidate,
 } from "../features/safety/types";
 import type {
@@ -63,11 +69,7 @@ import type {
   SourceAnnotation,
 } from "../features/records/types";
 
-const DEFAULT_INPUT = `这段时间我过得特别难受。每天早上想到要去学校，心里就沉甸甸的，很害怕。我不是不想学习，但上课时总控制不住地分心，总担心同学在背后议论我。放学我也尽量绕路，躲开那几个经常堵我的同学。
-
-这些事压得我快喘不过气了。我试过想跟爸妈或者别人说，但话到嘴边又说不出来，怕没人信，也怕情况变得更糟。现在晚上经常失眠，躲在被子里哭，白天还要强撑着，感觉特别累，好像下一秒就要垮掉。
-
-我真的不知道该怎么办了，感觉自己快扛不住了。您能给我一点建议吗？`;
+const DEFAULT_INPUT = `我讨厌我的家庭 我觉得我一分钟也呆不下去 我恶心 我讨厌我妈 每天不停地恶心我 我一直和他待在一起我就感觉到压抑 我恶心他 我想死掉`;
 type WorkspaceViewMode = "workspace" | "safety";
 
 function buildInitialSafetyResponseMap(result: SafetyCheckResponse): Record<string, string> {
@@ -236,6 +238,13 @@ export function WorkspacePage() {
   const [safetyPolishedText, setSafetyPolishedText] = useState(
     persistedSafetySnapshot?.safetyPolishedText ?? "",
   );
+  const [safetyResponseVersions, setSafetyResponseVersions] = useState<SafetyResponseVersion[]>(
+    persistedSafetySnapshot?.safetyResponseVersions ?? [],
+  );
+  const [safetyDialogueEvaluation, setSafetyDialogueEvaluation] =
+    useState<SafetyDialogueEvaluation>(
+      persistedSafetySnapshot?.safetyDialogueEvaluation ?? EMPTY_SAFETY_DIALOGUE_EVALUATION,
+    );
   const [initialSafetyResponsesBySource, setInitialSafetyResponsesBySource] = useState<Record<string, string>>(
     persistedSafetySnapshot?.initialSafetyResponsesBySource ?? {},
   );
@@ -298,6 +307,8 @@ export function WorkspacePage() {
       initialSafetyResponsesBySource,
       safetySourceAnnotations,
       safetyExpertAnnotation,
+      safetyResponseVersions,
+      safetyDialogueEvaluation,
       isSafetyPolishVisible,
       viewMode,
     });
@@ -307,6 +318,8 @@ export function WorkspacePage() {
     isSafetyPolishVisible,
     safetyExpertAnnotation,
     safetySourceAnnotations,
+    safetyResponseVersions,
+    safetyDialogueEvaluation,
     selectedSafetyResponseSource,
     safetyPolishedText,
     safetySourceUserInput,
@@ -497,6 +510,122 @@ export function WorkspacePage() {
     }
 
     return (activeSafetyCandidate?.safe_response || safetyState.result?.safe_response || "").trim();
+  }
+
+  function buildSafetySampleSnapshot() {
+    /**
+     * 输入：
+     * - 当前安全回复处理页的已选来源、候选列表、批注、专家说明和版本状态。
+     * 输出：
+     * - 返回一份适合直接随安全回复记录一起入库的过程快照对象。
+     * 作用：
+     * - 让安全回复历史记录不仅能还原“最终发了什么”，也能回看“当时有哪些候选、怎么批注、经历了哪些版本”。
+     */
+
+    return {
+      user_input: safetySourceUserInput || userInput,
+      risk_labels: safetyState.status === "success" && safetyState.result ? safetyState.result.risk_labels : [],
+      corrected_risk_labels: correctedRiskLabels,
+      selected_response_source: activeSafetyCandidate?.source ?? "",
+      selected_response_source_label: activeSafetyCandidate?.source_label ?? "",
+      ai_safe_response: getOriginalSafetyResponse(activeSafetyCandidate?.source),
+      expert_polished_response: safetyPolishedText,
+      expert_annotation: safetyExpertAnnotation.trim(),
+      source_annotations: safetySourceAnnotations,
+      response_versions: safetyResponseVersions,
+      safe_response_candidates:
+        safetyState.status === "success" && safetyState.result
+          ? safetyState.result.safe_response_candidates ?? []
+          : [],
+    };
+  }
+
+  function buildSafetyResponseVersionsForSave() {
+    /**
+     * 输入：
+     * - 当前安全回复页面上的版本历史、当前选中来源和最新润色文本。
+     * 输出：
+     * - 返回保存安全回复记录时应该落库的版本列表；如果还没有任何版本历史，则补一条当前版本基线。
+     * - 如果当前页面还存在一轮尚未入历史的人工批注或手动修改，也会在保存前补成一个新版本。
+     * 作用：
+     * - 让没有点过“按批注重生成”的安全回复，也能在历史里保留一条“保存时的当前版本”作为过程起点。
+     * - 同时保证每一轮专家批注都会沉淀进版本历史，而不会因为最后一步是直接保存而被吞掉。
+     */
+
+    const currentVersion = {
+      version_index: 0,
+      label: "专家当前版本",
+      response: safetyPolishedText,
+      selected_response_source: activeSafetyCandidate?.source ?? "",
+      selected_response_source_label: activeSafetyCandidate?.source_label ?? "",
+      created_at: new Date().toISOString(),
+      source: "manual",
+      expert_annotation: safetyExpertAnnotation.trim(),
+      source_annotations: safetySourceAnnotations,
+    };
+
+    if (safetyResponseVersions.length === 0) {
+      return [currentVersion];
+    }
+
+    const latestVersion = safetyResponseVersions[safetyResponseVersions.length - 1];
+    const hasCurrentRoundNotes =
+      currentVersion.expert_annotation.length > 0 || currentVersion.source_annotations.length > 0;
+    const hasCurrentResponseChanged =
+      currentVersion.response.trim() !== latestVersion.response.trim() ||
+      currentVersion.selected_response_source !== latestVersion.selected_response_source ||
+      currentVersion.selected_response_source_label !== latestVersion.selected_response_source_label;
+    const hasCurrentNotesChanged =
+      currentVersion.expert_annotation !== (latestVersion.expert_annotation ?? "") ||
+      JSON.stringify(currentVersion.source_annotations) !==
+        JSON.stringify(latestVersion.source_annotations ?? []);
+
+    if (!hasCurrentRoundNotes && !hasCurrentResponseChanged && !hasCurrentNotesChanged) {
+      return safetyResponseVersions;
+    }
+
+    return [
+      ...safetyResponseVersions,
+      {
+        ...currentVersion,
+        version_index: safetyResponseVersions.length,
+        label: hasCurrentRoundNotes ? `保存前批注轮次 v${safetyResponseVersions.length + 1}` : "保存时当前版本",
+        source: hasCurrentRoundNotes ? "manual_annotation" : "manual_save",
+      },
+    ];
+  }
+
+  function deriveSafetyHistoryAnnotationSummary(versions: SafetyResponseVersion[]) {
+    /**
+     * 输入：
+     * - versions：本次安全回复准备入库的完整版本历史。
+     * - 当前编辑区里的专家总体说明与高亮批注状态。
+     * 输出：
+     * - 返回保存历史记录时应该写入顶层详情字段的专家批注和高亮批注。
+     * 作用：
+     * - 安全回复在每次“按批注重生成”后会清空当前批注输入区，避免旧批注误带到下一轮；
+     *   但保存历史时仍需要回退到最近一次真正用于重生成的批注内容，防止详情页错误显示“暂无批注”。
+     */
+
+    const normalizedExpertAnnotation = safetyExpertAnnotation.trim();
+    if (normalizedExpertAnnotation || safetySourceAnnotations.length > 0) {
+      return {
+        expertAnnotation: normalizedExpertAnnotation,
+        sourceAnnotations: safetySourceAnnotations,
+      };
+    }
+
+    const latestVersionWithNotes = [...versions]
+      .reverse()
+      .find(
+        (version) =>
+          version.expert_annotation.trim().length > 0 || (version.source_annotations?.length ?? 0) > 0,
+      );
+
+    return {
+      expertAnnotation: latestVersionWithNotes?.expert_annotation.trim() ?? "",
+      sourceAnnotations: latestVersionWithNotes?.source_annotations ?? [],
+    };
   }
 
   function togglePersona(personaName: string) {
@@ -975,9 +1104,11 @@ export function WorkspacePage() {
         setSelectedSafetyResponseSource(null);
         setSafetySourceUserInput("");
         setSafetyPolishedText("");
+        setSafetyResponseVersions([]);
         setInitialSafetyResponsesBySource({});
         setSafetySourceAnnotations([]);
         setSafetyExpertAnnotation("");
+        setSafetyDialogueEvaluation(EMPTY_SAFETY_DIALOGUE_EVALUATION);
         setIsSafetyPolishVisible(false);
         setViewMode("workspace");
         setSafetyStatusText("检测结果为安全，中间区域保持常规工作台布局。");
@@ -989,9 +1120,11 @@ export function WorkspacePage() {
       setSelectedSafetyResponseSource(nextSafetyCandidate?.source ?? null);
       setSafetySourceUserInput(userInput);
       setSafetyPolishedText(nextSafetyCandidate?.safe_response ?? result.safe_response ?? "");
+      setSafetyResponseVersions([]);
       setInitialSafetyResponsesBySource(buildInitialSafetyResponseMap(result));
       setSafetySourceAnnotations([]);
       setSafetyExpertAnnotation("");
+      setSafetyDialogueEvaluation(EMPTY_SAFETY_DIALOGUE_EVALUATION);
       setIsSafetyPolishVisible(false);
       setSafetyStatusText("检测到需要优先处理的风险信号，中间区域已切换为安全回复结果页。");
       setViewMode("safety");
@@ -1057,10 +1190,12 @@ export function WorkspacePage() {
     if (nextCandidate?.safe_response) {
       setSafetyPolishedText(nextCandidate.safe_response);
     }
-    setSafetySourceAnnotations([]);
-    setSafetyExpertAnnotation("");
-    setSafetyRegenerateStatusText(null);
-  }
+      setSafetyResponseVersions([]);
+      setSafetySourceAnnotations([]);
+      setSafetyExpertAnnotation("");
+      setSafetyDialogueEvaluation(EMPTY_SAFETY_DIALOGUE_EVALUATION);
+      setSafetyRegenerateStatusText(null);
+    }
 
   function handleAddSafetySourceAnnotation(annotation: SourceAnnotation) {
     /**
@@ -1124,7 +1259,34 @@ export function WorkspacePage() {
     };
 
     try {
+      const existingVersions =
+        safetyResponseVersions.length > 0
+          ? safetyResponseVersions
+          : [
+              {
+                version_index: 0,
+                label: "专家当前版本",
+                response: safetyPolishedText,
+                selected_response_source: activeSafetyCandidate.source,
+                selected_response_source_label: activeSafetyCandidate.source_label,
+                created_at: new Date().toISOString(),
+                source: "manual",
+                expert_annotation: safetyExpertAnnotation.trim(),
+                source_annotations: safetySourceAnnotations,
+              },
+            ];
       const nextCandidate = await regenerateSafetyReply.mutateAsync(payload);
+      const nextVersion: SafetyResponseVersion = {
+        version_index: existingVersions.length,
+        label: `批注重生成 v${existingVersions.length + 1}`,
+        response: nextCandidate.safe_response,
+        selected_response_source: nextCandidate.source,
+        selected_response_source_label: nextCandidate.source_label,
+        created_at: new Date().toISOString(),
+        source: "annotation_regenerate",
+        expert_annotation: safetyExpertAnnotation.trim(),
+        source_annotations: safetySourceAnnotations,
+      };
       const existingCandidates = safetyState.result.safe_response_candidates ?? [];
       const nextCandidates =
         existingCandidates.length > 0
@@ -1142,6 +1304,7 @@ export function WorkspacePage() {
       };
 
       replaceSafetyResult(nextResult);
+      setSafetyResponseVersions([...existingVersions, nextVersion]);
       setInitialSafetyResponsesBySource((current) => {
         if (current[nextCandidate.source]) {
           return current;
@@ -1156,6 +1319,7 @@ export function WorkspacePage() {
       setSafetyPolishedText(nextCandidate.safe_response);
       setSafetySourceAnnotations([]);
       setSafetyExpertAnnotation("");
+      setSafetyDialogueEvaluation(EMPTY_SAFETY_DIALOGUE_EVALUATION);
       setIsSafetyPolishVisible(true);
       setSafetyRegenerateStatusText("已基于安全回复批注生成新版本，请继续润色或重新高亮。");
     } catch (error) {
@@ -1171,6 +1335,9 @@ export function WorkspacePage() {
     }
 
     try {
+      const responseVersionsForSave = buildSafetyResponseVersionsForSave();
+      const { expertAnnotation: historyExpertAnnotation, sourceAnnotations: historySourceAnnotations } =
+        deriveSafetyHistoryAnnotationSummary(responseVersionsForSave);
       await saveSafetyRecord.mutateAsync({
         user_input: safetySourceUserInput || userInput,
         risk_labels: safetyState.result.risk_labels,
@@ -1178,7 +1345,22 @@ export function WorkspacePage() {
         risk_reason: safetyState.result.reason,
         ai_safe_response: getOriginalSafetyResponse(activeSafetyCandidate?.source),
         expert_polished_response: safetyPolishedText,
+        selected_response_source: activeSafetyCandidate?.source ?? "",
+        selected_response_source_label: activeSafetyCandidate?.source_label ?? "",
+        safe_response_candidates: safetyState.result.safe_response_candidates ?? [],
+        expert_annotation: historyExpertAnnotation,
+        safety_evaluation: normalizeSafetyDialogueEvaluation(safetyDialogueEvaluation),
+        sample_snapshot: {
+          ...buildSafetySampleSnapshot(),
+          expert_annotation: historyExpertAnnotation,
+          source_annotations: historySourceAnnotations,
+          response_versions: responseVersionsForSave,
+          safety_evaluation: normalizeSafetyDialogueEvaluation(safetyDialogueEvaluation),
+        },
+        source_annotations: historySourceAnnotations,
+        response_versions: responseVersionsForSave,
       });
+      setSafetyResponseVersions(responseVersionsForSave);
       setSafetySaveStatusText("这条安全回复记录已经保存到安全样本库。");
     } catch (error) {
       setSafetySaveStatusText(error instanceof Error ? error.message : "安全回复记录保存失败");
@@ -1357,6 +1539,8 @@ export function WorkspacePage() {
                 onSafetyExpertAnnotationChange={setSafetyExpertAnnotation}
                 isSafetyPolishVisible={isSafetyPolishVisible}
                 onToggleSafetyPolish={handleToggleSafetyPolish}
+                safetyDialogueEvaluation={safetyDialogueEvaluation}
+                onSafetyDialogueEvaluationChange={setSafetyDialogueEvaluation}
                 canRegenerateSafetyReply={Boolean(safetySourceAnnotations.length > 0)}
                 isRegeneratingSafetyReply={regenerateSafetyReply.isPending}
                 onRegenerateSafetyReply={handleRegenerateSafetyReply}

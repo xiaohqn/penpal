@@ -7,27 +7,31 @@
  *   对比模式下当前选中的安全回复候选来源，以及切换候选后的页面级状态回写回调。
  * - safetyPolishedText / onSafetyPolishedTextChange：安全回复专家润色区的当前文本和回写回调。
  * - safetySourceAnnotations / onAddSafetySourceAnnotation / onRemoveSafetySourceAnnotation：
- *   安全回复润色区里针对当前回复留下的高亮批注，以及新增 / 删除批注的页面级回写回调。
+ *   安全回复润色区里针对当前回复留下的片段批注，以及新增 / 删除批注的页面级回写回调。
  * - safetyExpertAnnotation / onSafetyExpertAnnotationChange：
  *   安全回复整体修改说明，以及编辑该说明时的页面级回写回调。
  * - isSafetyPolishVisible / onToggleSafetyPolish：控制安全回复专家润色区是否展开。
+ * - safetyDialogueEvaluation / onSafetyDialogueEvaluationChange：
+ *   安全对话四维评分结果，以及评分变化时的页面级回写回调。
  * - canRegenerateSafetyReply / isRegeneratingSafetyReply / onRegenerateSafetyReply / safetyRegenerateStatusText：
  *   控制安全回复“按批注重生成”按钮的可用状态、请求状态与结果提示。
  * - canSaveSafetyRecord / isSavingSafetyRecord / onSaveSafetyRecord / safetySaveStatusText：
  *   控制安全回复记录保存条的状态与行为。
  * - onBack：从安全回复结果页返回工作台主页。
  * 输出：
- * - 渲染安全回复结果页，并提供风险类型人工修正入口、安全回复人工润色入口与专家批注重生成入口。
+ * - 渲染安全回复结果页，并提供风险类型人工修正入口、安全回复人工润色入口与整体说明重生成入口。
  * 作用：
- * - 这个组件负责展示不安全来信的兜底回复，同时让人工可以在前端直接修正风险类别，并基于安全回复批注快速迭代新版本。
+ * - 这个组件负责展示不安全来信的兜底回复，同时让人工可以在前端直接修正风险类别，并基于安全回复说明快速迭代新版本。
  */
 import { useState } from "react";
 import { RefreshCcw } from "lucide-react";
 
 import { PolishingEditor } from "./PolishingEditor";
 import { SaveRecordBar } from "./SaveRecordBar";
+import { SafetyDialogueEvaluationPanel } from "./SafetyDialogueEvaluationPanel";
 import type {
   SafetyCheckResponse,
+  SafetyDialogueEvaluation,
   SafetyResponseCandidate,
 } from "../features/safety/types";
 import type { SourceAnnotation } from "../features/records/types";
@@ -58,6 +62,8 @@ type Props = {
   onSafetyExpertAnnotationChange: (value: string) => void;
   isSafetyPolishVisible: boolean;
   onToggleSafetyPolish: () => void;
+  safetyDialogueEvaluation: SafetyDialogueEvaluation;
+  onSafetyDialogueEvaluationChange: (value: SafetyDialogueEvaluation) => void;
   canRegenerateSafetyReply: boolean;
   isRegeneratingSafetyReply: boolean;
   onRegenerateSafetyReply: () => void;
@@ -178,6 +184,8 @@ export function SafetyResultPanel({
   onSafetyExpertAnnotationChange,
   isSafetyPolishVisible,
   onToggleSafetyPolish,
+  safetyDialogueEvaluation,
+  onSafetyDialogueEvaluationChange,
   canRegenerateSafetyReply,
   isRegeneratingSafetyReply,
   onRegenerateSafetyReply,
@@ -426,6 +434,11 @@ export function SafetyResultPanel({
         </div>
       </section>
 
+      <SafetyDialogueEvaluationPanel
+        value={safetyDialogueEvaluation}
+        onChange={onSafetyDialogueEvaluationChange}
+      />
+
       {isSafetyPolishVisible ? (
         <div className="grid gap-5">
           <PolishingEditor
@@ -442,10 +455,10 @@ export function SafetyResultPanel({
           <section className="rounded-[28px] border border-line bg-white/78 p-6 shadow-soft">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.22em] text-moss">专家批注重生成</p>
-                <h2 className="mt-2 font-serif text-3xl text-ink">按当前安全回复批注生成新版本</h2>
+                <p className="text-sm uppercase tracking-[0.22em] text-moss">说明驱动重生成</p>
+                <h2 className="mt-2 font-serif text-3xl text-ink">按当前安全回复说明生成新版本</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-ink/68">
-                  先在上面的安全回复里划词并填写批注，再补充整体修改要求。新版本会优先处理这些被高亮的片段，同时保留安全边界和现实求助建议。
+                  先在上面的安全回复里划词并填写片段批注，再补充整体修改说明。新版本会优先处理这些被标记的片段，同时保留安全边界和现实求助建议。
                 </p>
               </div>
               <button
@@ -455,7 +468,7 @@ export function SafetyResultPanel({
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-amber px-5 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-amber/45"
               >
                 <RefreshCcw size={16} />
-                {isRegeneratingSafetyReply ? "重生成中..." : "按批注重生成"}
+                {isRegeneratingSafetyReply ? "重生成中..." : "按说明重生成"}
               </button>
             </div>
             <textarea
