@@ -5,15 +5,23 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.services.batch_session_service import BatchSessionService
+from app.services.auth_service import AuthService
 from app.services.excel_service import ExcelService
 from app.services.orchestration_service import OrchestrationService
 from app.services.persona_service import PersonaService
 from app.services.record_service import RecordService
 from app.services.rag_service import RagService
+from app.services.user_letter_service import UserLetterService
+from app.services.mail_thread_service import MailThreadService
+from app.services.safety_service import SafetyService
 
 
 def get_settings(request: Request) -> Settings:
     return request.app.state.settings
+
+
+def get_auth_service(request: Request) -> AuthService:
+    return request.app.state.auth_service
 
 
 def get_db_session(request: Request) -> Generator[Session, None, None]:
@@ -47,3 +55,15 @@ def get_batch_session_service(request: Request) -> BatchSessionService:
 
 def get_rag_service(request: Request) -> RagService:
     return request.app.state.rag_service
+
+
+def get_user_letter_service(request: Request) -> UserLetterService:
+    return request.app.state.user_letter_service
+
+
+def get_mail_thread_service(request: Request) -> MailThreadService:
+    return request.app.state.mail_thread_service
+
+
+def get_safety_service(request: Request) -> SafetyService:
+    return request.app.state.safety_service

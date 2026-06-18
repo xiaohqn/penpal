@@ -122,6 +122,30 @@ VITE_API_BASE_URL=http://123.123.123.123:8000 npm run build
 
 如果你用了同域名反向代理，让 `/api` 直接转发到 FastAPI，则不需要设置 `VITE_API_BASE_URL`。
 
+### 2.2 GitHub 与私有数据
+
+建议 GitHub 只提交代码和示例配置，不提交真实运行数据：
+
+- `backend/.env`：保存模型 key、邀请码、私有路径，只在服务器手动创建。
+- `data/*.db`：SQLite 数据库，只在服务器手动复制或新建。
+- `data/seed.json`：真实 RAG 种子库，只在服务器手动复制。
+- `data/seed.example.json`：可以提交，用来说明种子库格式。
+
+注册已改为邀请制，后端 `.env` 至少需要配置：
+
+```env
+VISITOR_INVITE_CODES=用户邀请码1,用户邀请码2
+COUNSELOR_INVITE_CODES=咨询师邀请码1
+```
+
+如果当前缺少咨询师，可以关闭用户端人工回复能力：
+
+```env
+COUNSELOR_FEATURES_ENABLED=false
+```
+
+关闭后，用户端不会展示“人工回复”；高风险来信仍会做安全识别和安全回应，但不会自动转人工。
+
 ## 核心接口
 
 - `GET /api/v1/personas`
@@ -171,3 +195,5 @@ VITE_API_BASE_URL=http://123.123.123.123:8000 npm run build
 - 风格由专家在工作台逐条自由选择
 - 专家逐条生成、润色、写批注，全部完成后导出最终结果 Excel
 - 历史记录页可导出沉淀记录 Excel，包含专家批注
+
+cloudflared tunnel --url http://127.0.0.1:5173

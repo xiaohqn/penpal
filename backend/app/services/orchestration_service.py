@@ -10,6 +10,7 @@ from app.core.sse import format_sse
 from app.services.generator_service import GeneratorService
 from app.services.planner_service import PlannerService
 from app.services.rag_service import RagService
+from app.services.safety_service import RISK_ORDER, SafetyService
 
 
 class OrchestrationService:
@@ -20,12 +21,14 @@ class OrchestrationService:
         generator_service: GeneratorService,
         rag_service: RagService | None = None,
         session_maker: sessionmaker | None = None,
+        safety_service: SafetyService | None = None,
     ):
         self.settings = settings
         self.planner_service = planner_service
         self.generator_service = generator_service
         self.rag_service = rag_service or RagService()
         self.session_maker = session_maker
+        self.safety_service = safety_service or SafetyService()
 
     async def stream_generation(
         self,
@@ -78,7 +81,8 @@ class OrchestrationService:
                     persona_name=persona_name,
                     mode=target["mode"],
                 )
-                full_response = draft_result["response"]
+                reviewed_draft = self._review_draft_response(draft_result["response"])
+                full_response = reviewed_draft["response"]
                 async for chunk in self.generator_service.emit_chunks(full_response):
                     await queue.put(
                         {
@@ -100,6 +104,7 @@ class OrchestrationService:
                     "planner_output": planner_output,
                     "response": full_response,
                     "raw_response": draft_result["raw"],
+                    "safety_review": reviewed_draft["safety_review"],
                 }
                 await queue.put(
                     {
@@ -109,6 +114,7 @@ class OrchestrationService:
                         "source": target["source"],
                         "source_label": target["label"],
                         "response": full_response,
+                        "safety_review": reviewed_draft["safety_review"],
                     }
                 )
             except Exception as exc:
@@ -193,6 +199,7 @@ class OrchestrationService:
                     persona_name=persona_name,
                     mode=target["mode"],
                 )
+                reviewed_draft = self._review_draft_response(draft_result["response"])
                 return {
                     "draft_id": self._build_draft_id(persona_name, target["source"]),
                     "persona_name": persona_name,
@@ -200,8 +207,9 @@ class OrchestrationService:
                     "source_label": target["label"],
                     "style_config": build_style_summary(persona_name),
                     "planner_output": planner_output,
-                    "response": draft_result["response"],
+                    "response": reviewed_draft["response"],
                     "raw_response": draft_result["raw"],
+                    "safety_review": reviewed_draft["safety_review"],
                 }
             except Exception:
                 return None
@@ -231,6 +239,7 @@ class OrchestrationService:
             persona_name=normalized_persona,
             mode=target["mode"],
         )
+        reviewed_draft = self._review_draft_response(draft_result["response"])
         return {
             "draft_id": self._build_draft_id(normalized_persona, target["source"]),
             "persona_name": normalized_persona,
@@ -238,8 +247,27 @@ class OrchestrationService:
             "source_label": target["label"],
             "style_config": build_style_summary(normalized_persona),
             "planner_output": enriched_planner_output,
-            "response": draft_result["response"],
+            "response": reviewed_draft["response"],
             "raw_response": draft_result["raw"],
+            "safety_review": reviewed_draft["safety_review"],
+        }
+
+    def _review_draft_response(self, response: str) -> dict[str, Any]:
+        assessment = self.safety_service.assess_reply(response)
+        blocked = RISK_ORDER.get(assessment.risk_level, 0) >= RISK_ORDER["HIGH"]
+        final_response = self.safety_service.safe_fallback_reply() if blocked else response
+        return {
+            "response": final_response,
+            "safety_review": {
+                "risk_level": assessment.risk_level,
+                "confidence": assessment.confidence,
+                "categories": assessment.categories,
+                "signals": assessment.signals,
+                "reasoning": assessment.reasoning,
+                "blocked": blocked,
+                "replacement_used": blocked,
+                "original_response": response if blocked else "",
+            },
         }
 
     def _build_generator_targets(self, compare_sources: bool, source_mode: str) -> list[dict[str, str]]:

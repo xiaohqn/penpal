@@ -1,4 +1,5 @@
 import { buildApiUrl } from "./api-base";
+import { getAuthHeaders, getStoredCounselorId, getStoredUserId } from "../app/auth";
 
 export type StreamEventHandler = (eventName: string, payload: unknown) => void;
 
@@ -12,6 +13,9 @@ export async function streamPost(
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
+      "X-Counselor-Id": getStoredCounselorId(),
+      "X-User-Id": getStoredUserId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(body),
   });

@@ -24,6 +24,7 @@ class RecordService:
         self,
         db: Session,
         payload: ConsultationRecordSaveRequest,
+        counselor_id: str = "default",
     ) -> ConsultationRecordResponse:
         planner_labels = payload.planner_labels or self.rag_service.build_planner_labels(payload.planner_output)
         sample_tags = payload.sample_tags or self.rag_service.build_sample_tags(
@@ -33,6 +34,7 @@ class RecordService:
             source_annotations=payload.source_annotations,
         )
         record = ConsultationRecord(
+            counselor_id=counselor_id,
             user_input=payload.user_input,
             selected_persona_name=payload.selected_persona_name,
             selected_style_config_json=payload.selected_style_config,
@@ -45,6 +47,7 @@ class RecordService:
             sample_reason=payload.sample_reason,
             sample_tags_json=sample_tags,
             planner_labels_json=planner_labels,
+            risk_assessment_json=payload.risk_assessment,
             evaluation_json=payload.evaluation,
             sample_snapshot_json=payload.sample_snapshot,
             source_annotations_json=payload.source_annotations,
@@ -62,19 +65,24 @@ class RecordService:
         db: Session,
         page: int,
         page_size: int,
+        counselor_id: str = "default",
+        include_all: bool = False,
     ) -> ConsultationRecordListResponse:
-        total = db.scalar(select(func.count()).select_from(ConsultationRecord)) or 0
+        filters = [] if include_all else [ConsultationRecord.counselor_id == counselor_id]
+        total_query = select(func.count()).select_from(ConsultationRecord)
+        if filters:
+            total_query = total_query.where(*filters)
+        total = db.scalar(total_query) or 0
         offset = (page - 1) * page_size
-        records = db.scalars(
-            select(ConsultationRecord)
-            .order_by(desc(ConsultationRecord.created_at))
-            .offset(offset)
-            .limit(page_size)
-        ).all()
+        query = select(ConsultationRecord)
+        if filters:
+            query = query.where(*filters)
+        records = db.scalars(query.order_by(desc(ConsultationRecord.created_at)).offset(offset).limit(page_size)).all()
 
         items = [
             ConsultationRecordListItem(
                 id=record.id,
+                counselor_id=record.counselor_id,
                 user_input=record.user_input,
                 selected_persona_name=record.selected_persona_name,
                 expert_annotation=record.expert_annotation,
@@ -82,6 +90,7 @@ class RecordService:
                 sample_reason=record.sample_reason,
                 sample_tags_json=record.sample_tags_json or {},
                 planner_labels_json=record.planner_labels_json or {},
+                risk_assessment_json=record.risk_assessment_json or {},
                 evaluation_json=record.evaluation_json or {},
                 created_at=record.created_at,
                 updated_at=record.updated_at,
@@ -95,14 +104,28 @@ class RecordService:
             page_size=page_size,
         )
 
-    def get_record(self, db: Session, record_id: int) -> ConsultationRecordResponse | None:
+    def get_record(
+        self,
+        db: Session,
+        record_id: int,
+        counselor_id: str = "default",
+        include_all: bool = False,
+    ) -> ConsultationRecordResponse | None:
         record = db.get(ConsultationRecord, record_id)
         if record is None:
             return None
+        if not include_all and record.counselor_id != counselor_id:
+            return None
         return ConsultationRecordResponse.model_validate(record)
 
-    def get_all_records_for_export(self, db: Session) -> list[dict]:
-        records = db.scalars(
-            select(ConsultationRecord).order_by(desc(ConsultationRecord.created_at))
-        ).all()
+    def get_all_records_for_export(
+        self,
+        db: Session,
+        counselor_id: str = "default",
+        include_all: bool = False,
+    ) -> list[dict]:
+        query = select(ConsultationRecord)
+        if not include_all:
+            query = query.where(ConsultationRecord.counselor_id == counselor_id)
+        records = db.scalars(query.order_by(desc(ConsultationRecord.created_at))).all()
         return [ConsultationRecordResponse.model_validate(record).model_dump() for record in records]

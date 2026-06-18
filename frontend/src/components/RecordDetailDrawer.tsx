@@ -12,6 +12,7 @@ export function RecordDetailDrawer({ record }: Props) {
         <h2 className="mt-1 font-serif text-2xl text-ink">
           {record ? `#${record.id} · ${record.selected_persona_name}` : "选择一条记录"}
         </h2>
+        {record ? <p className="mt-1 text-sm text-ink/56">咨询师 ID：{record.counselor_id}</p> : null}
       </div>
       {record ? (
         <div className="grid gap-4 text-sm leading-7 text-ink/82">

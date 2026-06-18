@@ -46,6 +46,18 @@ export type DraftCandidate = {
   planner_output: PlannerOutput;
   response: string;
   raw_response?: string;
+  safety_review?: SafetyReview;
+};
+
+export type SafetyReview = {
+  risk_level?: string;
+  confidence?: number;
+  categories?: string[];
+  signals?: string[];
+  reasoning?: string;
+  blocked?: boolean;
+  replacement_used?: boolean;
+  original_response?: string;
 };
 
 export type PersonaCatalogItem = {

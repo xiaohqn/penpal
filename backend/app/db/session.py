@@ -26,6 +26,13 @@ def init_db(engine: Engine) -> None:
             engine,
             consultation_columns,
             "consultation_records",
+            "counselor_id",
+            "TEXT NOT NULL DEFAULT 'default'",
+        )
+        _ensure_sqlite_column(
+            engine,
+            consultation_columns,
+            "consultation_records",
             "expert_annotation",
             "TEXT NOT NULL DEFAULT ''",
         )
@@ -55,6 +62,13 @@ def init_db(engine: Engine) -> None:
             consultation_columns,
             "consultation_records",
             "planner_labels_json",
+            "JSON NOT NULL DEFAULT '{}'",
+        )
+        _ensure_sqlite_column(
+            engine,
+            consultation_columns,
+            "consultation_records",
+            "risk_assessment_json",
             "JSON NOT NULL DEFAULT '{}'",
         )
         _ensure_sqlite_column(
@@ -99,6 +113,14 @@ def init_db(engine: Engine) -> None:
             "batch_item_id",
             "INTEGER",
         )
+        batch_session_columns = {column["name"] for column in inspector.get_columns("batch_sessions")}
+        _ensure_sqlite_column(
+            engine,
+            batch_session_columns,
+            "batch_sessions",
+            "counselor_id",
+            "TEXT NOT NULL DEFAULT 'default'",
+        )
         batch_item_columns = {column["name"] for column in inspector.get_columns("batch_session_items")}
         _ensure_sqlite_column(
             engine,
@@ -132,6 +154,13 @@ def init_db(engine: Engine) -> None:
             engine,
             batch_item_columns,
             "batch_session_items",
+            "risk_assessment_json",
+            "JSON NOT NULL DEFAULT '{}'",
+        )
+        _ensure_sqlite_column(
+            engine,
+            batch_item_columns,
+            "batch_session_items",
             "evaluation_json",
             "JSON NOT NULL DEFAULT '{}'",
         )
@@ -141,6 +170,35 @@ def init_db(engine: Engine) -> None:
             "batch_session_items",
             "sample_snapshot_json",
             "JSON NOT NULL DEFAULT '{}'",
+        )
+        _ensure_sqlite_column(
+            engine,
+            batch_item_columns,
+            "batch_session_items",
+            "mail_thread_id",
+            "INTEGER",
+        )
+        _ensure_sqlite_column(
+            engine,
+            batch_item_columns,
+            "batch_session_items",
+            "context_json",
+            "JSON NOT NULL DEFAULT '{}'",
+        )
+        user_letter_columns = {column["name"] for column in inspector.get_columns("user_letters")}
+        _ensure_sqlite_column(
+            engine,
+            user_letter_columns,
+            "user_letters",
+            "response_preference",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_sqlite_column(
+            engine,
+            user_letter_columns,
+            "user_letters",
+            "assigned_counselor_id",
+            "TEXT",
         )
 
 

@@ -3,12 +3,15 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_counselor_id
 from app.api.deps import (
     get_batch_session_service,
     get_db_session,
     get_excel_service,
+    get_mail_thread_service,
     get_orchestration_service,
     get_record_service,
 )
@@ -23,8 +26,10 @@ from app.schemas.record import (
     BatchSessionItemRegenerateRequest,
     ReviewedBatchExportRequest,
 )
+from app.db.models import BatchSession, BatchSessionItem
 from app.services.batch_session_service import BatchSessionService
 from app.services.excel_service import ExcelService
+from app.services.mail_thread_service import MailThreadService
 from app.services.orchestration_service import OrchestrationService
 from app.services.record_service import RecordService
 
@@ -34,6 +39,7 @@ router = APIRouter(prefix="/batch", tags=["batch"])
 @router.post("/import", response_model=BatchSessionDetailResponse)
 async def import_batch_excel(
     file: UploadFile = File(...),
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     excel_service: ExcelService = Depends(get_excel_service),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
@@ -46,6 +52,7 @@ async def import_batch_excel(
         parsed = excel_service.parse_batch_import(content)
         return batch_session_service.create_session(
             db=db,
+            counselor_id=counselor_id,
             payload=BatchSessionCreateRequest(
                 source_file_name=file.filename or "",
                 items=parsed.items,
@@ -88,11 +95,17 @@ async def batch_generate_export(
 
 @router.get("/records/export")
 def export_records_excel(
+    scope: str = "mine",
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     record_service: RecordService = Depends(get_record_service),
     excel_service: ExcelService = Depends(get_excel_service),
 ) -> Response:
-    records = record_service.get_all_records_for_export(db=db)
+    records = record_service.get_all_records_for_export(
+        db=db,
+        counselor_id=counselor_id,
+        include_all=scope == "all",
+    )
     content = excel_service.export_records_excel(records)
     return Response(
         content=content,
@@ -118,20 +131,22 @@ def export_reviewed_batch_excel(
 
 @router.get("/sessions", response_model=BatchSessionListResponse)
 def list_batch_sessions(
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
 ) -> BatchSessionListResponse:
-    return batch_session_service.list_sessions(db=db)
+    return batch_session_service.list_sessions(db=db, counselor_id=counselor_id)
 
 
 @router.get("/sessions/{session_id}", response_model=BatchSessionDetailResponse)
 def get_batch_session(
     session_id: int,
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
 ) -> BatchSessionDetailResponse:
     try:
-        return batch_session_service.get_session_detail(db=db, session_id=session_id)
+        return batch_session_service.get_session_detail(db=db, session_id=session_id, counselor_id=counselor_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -141,16 +156,45 @@ def update_batch_session_item(
     session_id: int,
     item_id: int,
     payload: BatchSessionItemUpdateRequest,
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
+    mail_thread_service: MailThreadService = Depends(get_mail_thread_service),
 ) -> BatchSessionDetailResponse:
     try:
-        return batch_session_service.update_item(
+        previous_item = db.scalar(
+            select(BatchSessionItem)
+            .join(BatchSession)
+            .where(
+                BatchSessionItem.id == item_id,
+                BatchSessionItem.session_id == session_id,
+                BatchSession.counselor_id == counselor_id,
+            )
+        )
+        was_completed = previous_item.status == "completed" if previous_item is not None else False
+        detail = batch_session_service.update_item(
             db=db,
             session_id=session_id,
             item_id=item_id,
             payload=payload,
+            counselor_id=counselor_id,
         )
+        updated_item = next((item for item in detail.items if item.id == item_id), None)
+        should_send_reply = (
+            updated_item
+            and updated_item.mail_thread_id
+            and payload.status == "completed"
+            and not was_completed
+            and payload.latest_response.strip()
+        )
+        if should_send_reply:
+            mail_thread_service.submit_counselor_reply_text(
+                db=db,
+                counselor_id=counselor_id,
+                thread_id=updated_item.mail_thread_id,
+                content=payload.latest_response.strip(),
+            )
+        return detail
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -160,6 +204,7 @@ def rollback_batch_session_item(
     session_id: int,
     item_id: int,
     payload: BatchSessionItemRollbackRequest,
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
 ) -> BatchSessionDetailResponse:
@@ -169,6 +214,7 @@ def rollback_batch_session_item(
             session_id=session_id,
             item_id=item_id,
             version_index=payload.version_index,
+            counselor_id=counselor_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -179,12 +225,13 @@ async def regenerate_batch_session_item(
     session_id: int,
     item_id: int,
     payload: BatchSessionItemRegenerateRequest,
+    counselor_id: str = Depends(get_counselor_id),
     db: Session = Depends(get_db_session),
     orchestration_service: OrchestrationService = Depends(get_orchestration_service),
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
 ) -> BatchSessionDetailResponse:
     try:
-        session = batch_session_service.get_session_detail(db=db, session_id=session_id)
+        session = batch_session_service.get_session_detail(db=db, session_id=session_id, counselor_id=counselor_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -193,7 +240,7 @@ async def regenerate_batch_session_item(
         raise HTTPException(status_code=404, detail="Batch session item not found")
 
     annotation_block = _build_annotation_block(payload.source_annotations)
-    augmented_user_input = item.user_input
+    augmented_user_input = _build_generation_input(item.user_input, item.context_json)
     if payload.current_response.strip():
         augmented_user_input += f"\n\n【当前 AI 回复】\n{payload.current_response.strip()}"
     if annotation_block:
@@ -222,6 +269,7 @@ async def regenerate_batch_session_item(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": "annotation_regenerate",
         "source_annotations": [annotation.model_dump() for annotation in payload.source_annotations],
+        "safety_review": selected_draft.get("safety_review", {}),
     }
 
     return batch_session_service.append_response_version(
@@ -238,6 +286,7 @@ async def regenerate_batch_session_item(
         selected_style_config=selected_draft.get("style_config", {}),
         source_annotations=[annotation.model_dump() for annotation in payload.source_annotations],
         expert_annotation=payload.expert_annotation,
+        counselor_id=counselor_id,
     )
 
 
@@ -250,3 +299,39 @@ def _build_annotation_block(annotations: list[object]) -> str:
             continue
         lines.append(f"{index}. 回复片段：{quote or '未填写'}；专家批注：{note or '未填写'}")
     return "\n".join(lines)
+
+
+def _build_generation_input(user_input: str, context: dict | None) -> str:
+    if not context or context.get("kind") != "mail_thread_reply":
+        return user_input
+    risk = context.get("risk") or {}
+    transcript_items = context.get("transcript") or []
+    transcript = "\n\n".join(
+        f"{item.get('label') or '书信'}：\n{item.get('content') or ''}"
+        for item in transcript_items
+        if isinstance(item, dict)
+    )
+    memory_summary = "\n".join(
+        line for line in str(context.get("memory_summary") or "").splitlines() if not line.strip().startswith("风险趋势：")
+    ).strip()
+    risk_level = str(risk.get("level") or "NONE") if isinstance(risk, dict) else "NONE"
+    risk_signals = risk.get("signals") if isinstance(risk, dict) else []
+    risk_reasoning = str(risk.get("reasoning") or "") if isinstance(risk, dict) else ""
+    risk_block = ""
+    if risk_level != "NONE":
+        signals_text = "；".join(str(signal) for signal in risk_signals) if isinstance(risk_signals, list) else risk_reasoning
+        risk_block = f"【风险提示】\n等级：{risk_level}\n触发因素：{signals_text or risk_reasoning or '无'}"
+    parts = [
+        "【当前用户来信】",
+        user_input,
+        f"【系统记忆摘要】\n{memory_summary}" if memory_summary else "",
+        risk_block,
+        f"【用户回应偏好】{context.get('response_preference') or '温柔陪伴'}",
+        f"【用户署名】{context.get('signature') or '匿名'}",
+        f"【完整书信往返】\n{transcript}" if transcript else "",
+        str(
+            context.get("instruction")
+            or "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文、风险提示和用户偏好；不要声称自己是 AI；不要替代医疗诊断或治疗。"
+        ),
+    ]
+    return "\n\n".join(part for part in parts if part.strip())

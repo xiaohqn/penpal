@@ -17,4 +17,5 @@ def healthcheck(settings: Settings = Depends(get_settings)) -> dict[str, str | b
         "generator_mode": settings.effective_generator_mode,
         "local_generator_configured": bool(settings.resolve_local_generator_model_path()),
         "vllm_configured": bool(settings.vllm_model_name),
+        "counselor_features_enabled": settings.counselor_features_enabled,
     }

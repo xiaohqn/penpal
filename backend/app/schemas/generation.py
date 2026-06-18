@@ -14,6 +14,7 @@ class DraftCandidate(BaseModel):
     planner_output: dict[str, Any]
     response: str
     raw_response: str = ""
+    safety_review: dict[str, Any] = Field(default_factory=dict)
 
 
 class GenerationRequest(BaseModel):
@@ -75,5 +76,6 @@ class StreamEvent(BaseModel):
     planner_output: dict[str, Any] | None = None
     delta: str | None = None
     response: str | None = None
+    safety_review: dict[str, Any] | None = None
     message: str | None = None
     drafts: list[DraftCandidate] | None = None

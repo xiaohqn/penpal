@@ -24,6 +24,7 @@ export function DraftStreamTabs({ drafts, selectedPersona, onSelect }: Props) {
   }
 
   const current = drafts.find((item) => item.draft_id === selectedPersona) ?? drafts[0];
+  const currentSafety = getSafetyMeta(current.safety_review);
 
   return (
     <section className="rounded-panel border border-line bg-white/82 p-6 shadow-card backdrop-blur">
@@ -83,7 +84,23 @@ export function DraftStreamTabs({ drafts, selectedPersona, onSelect }: Props) {
           >
             {current.status === "streaming" ? "正在流式生成" : current.status === "error" ? "生成失败" : "可进入润色"}
           </span>
+          {currentSafety ? (
+            <span className={clsx("rounded-full px-3 py-1 text-xs", currentSafety.className)}>
+              {currentSafety.label}
+            </span>
+          ) : null}
         </div>
+        {currentSafety && current.safety_review?.signals?.length ? (
+          <div className="mb-5 rounded-[16px] border border-line bg-white/70 p-4 text-sm leading-7 text-ink/72">
+            <p className="font-semibold text-ink">安全审核提示</p>
+            {current.safety_review.signals.slice(0, 3).map((signal) => (
+              <p key={signal}>• {signal}</p>
+            ))}
+            {current.safety_review.replacement_used ? (
+              <p className="mt-2 text-red-700">原始草稿命中高风险表达，已替换为安全回应，请咨询师人工复核。</p>
+            ) : null}
+          </div>
+        ) : null}
         {current.error ? (
           <p className="text-sm text-red-600">{current.error}</p>
         ) : (
@@ -94,4 +111,15 @@ export function DraftStreamTabs({ drafts, selectedPersona, onSelect }: Props) {
       </article>
     </section>
   );
+}
+
+function getSafetyMeta(review: DraftState["safety_review"]) {
+  if (!review) return null;
+  if (review.replacement_used || review.blocked) {
+    return { label: "安全审核：已替换", className: "bg-red-100 text-red-700" };
+  }
+  if (review.risk_level && review.risk_level !== "NONE") {
+    return { label: `安全审核：${review.risk_level}`, className: "bg-[#FFF7ED] text-[#C2410C]" };
+  }
+  return { label: "安全审核通过", className: "bg-[#ECFDF5] text-[#047857]" };
 }

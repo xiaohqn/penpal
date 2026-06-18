@@ -1,0 +1,9 @@
+[
+  {
+    "index": "example-001",
+    "send_content": "这里放脱敏后的用户来信示例。",
+    "reply_content": "这里放脱敏后的高质量回信示例。",
+    "tags": ["example"],
+    "source": "example"
+  }
+]

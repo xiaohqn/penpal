@@ -53,11 +53,19 @@ class ExcelService:
             "sample_reason",
             "sample_tags_json",
             "planner_labels_json",
+            "risk_assessment_json",
             "evaluation_total",
-            "evaluation_intent_safety",
-            "evaluation_authentic_empathy",
-            "evaluation_grounded_guidance",
-            "evaluation_narrative_companionship",
+            "evaluation_problem_risk_recognition",
+            "evaluation_emotional_response_moderation",
+            "evaluation_cognitive_reframing",
+            "evaluation_advice_effectiveness",
+            "evaluation_value_guidance_safety",
+            "evaluation_has_safety_issue",
+            "evaluation_has_safety_advice",
+            "evaluation_safety_advice_effective",
+            "evaluation_has_safety_issue_note",
+            "evaluation_has_safety_advice_note",
+            "evaluation_safety_advice_effective_note",
             "evaluation_json",
             "user_input",
             "ai_selected_raw_response",
@@ -78,6 +86,8 @@ class ExcelService:
                 created_at_value = str(created_at or "")
             evaluation = record.get("evaluation_json", {}) or {}
             scores = evaluation.get("scores", {}) or {}
+            safety_checks = evaluation.get("safety_checks", {}) or {}
+            safety_notes = evaluation.get("safety_notes", {}) or {}
 
             sheet.append(
                 [
@@ -88,11 +98,19 @@ class ExcelService:
                     record.get("sample_reason", ""),
                     json.dumps(record.get("sample_tags_json", {}), ensure_ascii=False),
                     json.dumps(record.get("planner_labels_json", {}), ensure_ascii=False),
+                    json.dumps(record.get("risk_assessment_json", {}), ensure_ascii=False),
                     evaluation.get("total_score", ""),
-                    scores.get("intent_safety", ""),
-                    scores.get("authentic_empathy", ""),
-                    scores.get("grounded_guidance", ""),
-                    scores.get("narrative_companionship", ""),
+                    self._score_with_legacy(scores, "problem_risk_recognition"),
+                    self._score_with_legacy(scores, "emotional_response_moderation"),
+                    self._score_with_legacy(scores, "cognitive_reframing"),
+                    self._score_with_legacy(scores, "advice_effectiveness"),
+                    self._score_with_legacy(scores, "value_guidance_safety"),
+                    self._format_yes_no(safety_checks.get("has_safety_issue")),
+                    self._format_yes_no(safety_checks.get("has_safety_advice")),
+                    self._format_yes_no(safety_checks.get("safety_advice_effective")),
+                    safety_notes.get("has_safety_issue", ""),
+                    safety_notes.get("has_safety_advice", ""),
+                    safety_notes.get("safety_advice_effective", ""),
                     json.dumps(evaluation, ensure_ascii=False),
                     record.get("user_input", ""),
                     record.get("ai_selected_raw_response", ""),
@@ -169,11 +187,19 @@ class ExcelService:
             "selected_persona_name",
             "rag_ready",
             "sample_reason",
+            "risk_assessment_json",
             "evaluation_total",
-            "evaluation_intent_safety",
-            "evaluation_authentic_empathy",
-            "evaluation_grounded_guidance",
-            "evaluation_narrative_companionship",
+            "evaluation_problem_risk_recognition",
+            "evaluation_emotional_response_moderation",
+            "evaluation_cognitive_reframing",
+            "evaluation_advice_effectiveness",
+            "evaluation_value_guidance_safety",
+            "evaluation_has_safety_issue",
+            "evaluation_has_safety_advice",
+            "evaluation_safety_advice_effective",
+            "evaluation_has_safety_issue_note",
+            "evaluation_has_safety_advice_note",
+            "evaluation_safety_advice_effective_note",
             "evaluation_json",
             "final_response",
             "expert_annotation",
@@ -183,6 +209,8 @@ class ExcelService:
         for item in items:
             evaluation = item.get("evaluation", {}) or {}
             scores = evaluation.get("scores", {}) or {}
+            safety_checks = evaluation.get("safety_checks", {}) or {}
+            safety_notes = evaluation.get("safety_notes", {}) or {}
             sheet.append(
                 [
                     item.get("row_number", ""),
@@ -190,11 +218,19 @@ class ExcelService:
                     item.get("selected_persona_name", ""),
                     item.get("rag_ready", ""),
                     item.get("sample_reason", ""),
+                    json.dumps(item.get("risk_assessment", {}), ensure_ascii=False),
                     evaluation.get("total_score", ""),
-                    scores.get("intent_safety", ""),
-                    scores.get("authentic_empathy", ""),
-                    scores.get("grounded_guidance", ""),
-                    scores.get("narrative_companionship", ""),
+                    self._score_with_legacy(scores, "problem_risk_recognition"),
+                    self._score_with_legacy(scores, "emotional_response_moderation"),
+                    self._score_with_legacy(scores, "cognitive_reframing"),
+                    self._score_with_legacy(scores, "advice_effectiveness"),
+                    self._score_with_legacy(scores, "value_guidance_safety"),
+                    self._format_yes_no(safety_checks.get("has_safety_issue")),
+                    self._format_yes_no(safety_checks.get("has_safety_advice")),
+                    self._format_yes_no(safety_checks.get("safety_advice_effective")),
+                    safety_notes.get("has_safety_issue", ""),
+                    safety_notes.get("has_safety_advice", ""),
+                    safety_notes.get("safety_advice_effective", ""),
                     json.dumps(evaluation, ensure_ascii=False),
                     item.get("final_response", ""),
                     item.get("expert_annotation", ""),
@@ -204,3 +240,20 @@ class ExcelService:
         output = io.BytesIO()
         workbook.save(output)
         return output.getvalue()
+
+    @staticmethod
+    def _score_with_legacy(scores: dict[str, Any], key: str) -> Any:
+        legacy_keys = {
+            "problem_risk_recognition": "intent_safety",
+            "emotional_response_moderation": "authentic_empathy",
+            "cognitive_reframing": "grounded_guidance",
+        }
+        return scores.get(key, scores.get(legacy_keys.get(key, ""), ""))
+
+    @staticmethod
+    def _format_yes_no(value: Any) -> str:
+        if value is True:
+            return "是"
+        if value is False:
+            return "否"
+        return ""

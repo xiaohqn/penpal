@@ -22,17 +22,17 @@ import type {
   SaveRecordPayload,
 } from "./types";
 
-export function useRecords(page = 1, pageSize = 10) {
+export function useRecords(page = 1, pageSize = 10, scope: "mine" | "all" = "mine") {
   return useQuery({
-    queryKey: ["records", page, pageSize],
-    queryFn: () => fetchRecords(page, pageSize),
+    queryKey: ["records", page, pageSize, scope],
+    queryFn: () => fetchRecords(page, pageSize, scope),
   });
 }
 
-export function useRecord(recordId: number | null) {
+export function useRecord(recordId: number | null, scope: "mine" | "all" = "mine") {
   return useQuery({
-    queryKey: ["record", recordId],
-    queryFn: () => fetchRecord(recordId as number),
+    queryKey: ["record", recordId, scope],
+    queryFn: () => fetchRecord(recordId as number, scope),
     enabled: recordId !== null,
   });
 }
@@ -133,7 +133,7 @@ export function useExportBatchGeneration() {
 
 export function useExportRecordsExcel() {
   return useMutation({
-    mutationFn: () => exportRecordsExcel(),
+    mutationFn: (scope: "mine" | "all" = "mine") => exportRecordsExcel(scope),
   });
 }
 

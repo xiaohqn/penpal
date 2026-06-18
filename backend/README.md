@@ -73,6 +73,25 @@ DOUBAO_API_KEY=你的 API 模型 Key
 
 这样前端在“生成来源模式”切到“对比”时，会同时返回两类结果。
 
+### 注册、人工回复与私有数据
+
+注册默认走邀请制，`.env` 中配置逗号分隔的邀请码：
+
+```env
+VISITOR_INVITE_CODES=用户邀请码1,用户邀请码2
+COUNSELOR_INVITE_CODES=咨询师邀请码1
+```
+
+如果暂时没有咨询师，可以关闭人工回复：
+
+```env
+COUNSELOR_FEATURES_ENABLED=false
+```
+
+关闭后，用户不能选择人工回复；高风险来信仍会被安全识别并收到安全回应，但不会自动分配给咨询师。
+
+不要把真实 `.env`、SQLite 数据库、真实 `seed.json` 提交到 GitHub。部署时在服务器手动复制这些文件即可。
+
 ### 本地模型依赖
 
 本地模型模式除了 `requirements.txt` 里的依赖外，还需要安装 PyTorch。常见安装方式：

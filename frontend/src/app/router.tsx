@@ -1,15 +1,27 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import { AppProviders } from "./providers";
+import { AuthGate } from "../components/AuthGate";
+import { RoleHome } from "../components/RoleHome";
+import { LoginPage } from "../pages/LoginPage";
 import { RecordsPage } from "../pages/RecordsPage";
-import { WorkspacePage } from "../pages/WorkspacePage";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: (
       <AppProviders>
-        <WorkspacePage />
+        <AuthGate>
+          <RoleHome />
+        </AuthGate>
+      </AppProviders>
+    ),
+  },
+  {
+    path: "/login",
+    element: (
+      <AppProviders>
+        <LoginPage />
       </AppProviders>
     ),
   },
@@ -17,7 +29,9 @@ export const router = createBrowserRouter([
     path: "/records",
     element: (
       <AppProviders>
-        <RecordsPage />
+        <AuthGate>
+          <RecordsPage />
+        </AuthGate>
       </AppProviders>
     ),
   },

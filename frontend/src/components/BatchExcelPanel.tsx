@@ -15,6 +15,7 @@ type Props = {
   currentIndex: number;
   activeRowNumber: number | null;
   completedRowNumbers: number[];
+  mode?: "excel" | "mail";
   onImport: (file: File) => void;
   onSelectRow: (rowNumber: number) => void;
   onPrevious: () => void;
@@ -29,6 +30,7 @@ export function BatchExcelPanel({
   currentIndex,
   activeRowNumber,
   completedRowNumbers,
+  mode = "excel",
   onImport,
   onSelectRow,
   onPrevious,
@@ -36,6 +38,7 @@ export function BatchExcelPanel({
 }: Props) {
   const [expanded, setExpanded] = useState(true);
   const progress = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
+  const isMailMode = mode === "mail";
 
   return (
     <aside className="rounded-panel border border-line bg-white/82 p-5 shadow-soft backdrop-blur">
@@ -43,11 +46,13 @@ export function BatchExcelPanel({
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-mist px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-amber">
             <FileSpreadsheet size={14} />
-            Batch Drawer
+            {isMailMode ? "Mail Batch" : "Batch Drawer"}
           </div>
-          <h2 className="mt-3 font-serif text-2xl text-ink">批量任务侧栏</h2>
+          <h2 className="mt-3 font-serif text-2xl text-ink">{isMailMode ? "人工书信任务" : "批量任务侧栏"}</h2>
           <p className="mt-2 text-sm leading-7 text-ink/66">
-            Excel 只负责导入问题列表。每条来信的风格、润色和批注，都在主工作流里由专家自由决定。
+            {isMailMode
+              ? "系统分配给当前咨询师的用户书信会作为批量任务处理。每封信保存完成后，会自动送达用户信箱。"
+              : "Excel 只负责导入问题列表。每条来信的风格、润色和批注，都在主工作流里由专家自由决定。"}
           </p>
         </div>
         <button
@@ -60,26 +65,28 @@ export function BatchExcelPanel({
         </button>
       </div>
 
-      <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-[26px] border border-dashed border-line bg-paper/70 px-4 py-4 text-sm text-ink transition hover:border-amber/45 hover:bg-white">
-        <Upload size={16} />
-        {importing ? "导入中..." : "上传 Excel"}
-        <input
-          type="file"
-          accept=".xlsx"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              onImport(file);
-              event.target.value = "";
-            }
-          }}
-        />
-      </label>
+      {!isMailMode ? (
+        <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-[26px] border border-dashed border-line bg-paper/70 px-4 py-4 text-sm text-ink transition hover:border-amber/45 hover:bg-white">
+          <Upload size={16} />
+          {importing ? "导入中..." : "上传 Excel"}
+          <input
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                onImport(file);
+                event.target.value = "";
+              }
+            }}
+          />
+        </label>
+      ) : null}
 
       <div className="mt-4 rounded-[26px] border border-line bg-paper/72 p-4">
         <div className="flex items-center justify-between gap-3 text-sm text-ink/72">
-          <span className="truncate">{fileName ? `当前文件：${fileName}` : "尚未上传文件"}</span>
+          <span className="truncate">{isMailMode ? fileName || "人工书信任务" : fileName ? `当前文件：${fileName}` : "尚未上传文件"}</span>
           <span>{items.length} 条</span>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
@@ -167,7 +174,9 @@ export function BatchExcelPanel({
             </div>
           ) : (
             <div className="mt-4 rounded-[24px] border border-dashed border-line bg-white/58 px-4 py-5 text-sm leading-7 text-ink/62">
-              上传 Excel 后，这里会出现批量条目列表。你可以在右侧随时切换任务，在中间主流程里完成生成、润色和批注。
+              {isMailMode
+                ? "点击顶部“人工书信”后，系统会把分配给你的待回复书信载入这里。"
+                : "上传 Excel 后，这里会出现批量条目列表。你可以在右侧随时切换任务，在中间主流程里完成生成、润色和批注。"}
             </div>
           )}
         </div>

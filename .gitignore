@@ -1,7 +1,16 @@
 backend/.env
+backend/.env.*
+!backend/.env.example
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
-data/app.db
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite3
+data/seed.json
+data/*seed*.json
+!data/seed.example.json
+exports/
 __pycache__/
 .DS_Store

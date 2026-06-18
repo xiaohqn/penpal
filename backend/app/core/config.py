@@ -1,4 +1,5 @@
 from functools import lru_cache
+import json
 from pathlib import Path
 from typing import Literal
 
@@ -8,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "app.db"
-DEFAULT_RAG_SEED_PATH = PROJECT_ROOT.parent / "data" / "seed.json"
+DEFAULT_RAG_SEED_PATH = PROJECT_ROOT / "data" / "seed.json"
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
         env_file=str(BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        enable_decoding=False,
     )
 
     app_name: str = "Mindful Copilot API"
@@ -45,7 +47,7 @@ class Settings(BaseSettings):
     local_device: str = "auto"
     local_dtype: str = "auto"
     local_trust_remote_code: bool = True
-    local_generator_max_new_tokens: int = 1024
+    local_generator_max_new_tokens: int = 1536
     local_top_p: float = 0.9
 
     mock_llm: bool = True
@@ -53,10 +55,24 @@ class Settings(BaseSettings):
     stream_chunk_delay_ms: int = 15
     rag_seed_path: str = str(DEFAULT_RAG_SEED_PATH)
     rag_seed_enabled: bool = True
+    counselor_features_enabled: bool = True
+    visitor_invite_codes: list[str] = Field(default_factory=list)
+    counselor_invite_codes: list[str] = Field(default_factory=list)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                parsed = json.loads(stripped)
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("visitor_invite_codes", "counselor_invite_codes", mode="before")
+    @classmethod
+    def parse_invite_codes(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value

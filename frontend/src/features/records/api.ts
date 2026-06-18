@@ -1,4 +1,5 @@
 import { buildApiUrl } from "../../lib/api-base";
+import { getAuthHeaders, getStoredCounselorId } from "../../app/auth";
 import { request } from "../../lib/request";
 import type {
   BatchExcelImportResponse,
@@ -13,12 +14,12 @@ import type {
   SaveRecordPayload,
 } from "./types";
 
-export function fetchRecords(page = 1, pageSize = 10) {
-  return request<RecordListResponse>(`/records?page=${page}&page_size=${pageSize}`);
+export function fetchRecords(page = 1, pageSize = 10, scope: "mine" | "all" = "mine") {
+  return request<RecordListResponse>(`/records?page=${page}&page_size=${pageSize}&scope=${scope}`);
 }
 
-export function fetchRecord(recordId: number) {
-  return request<RecordDetail>(`/records/${recordId}`);
+export function fetchRecord(recordId: number, scope: "mine" | "all" = "mine") {
+  return request<RecordDetail>(`/records/${recordId}?scope=${scope}`);
 }
 
 export function saveRecord(payload: SaveRecordPayload) {
@@ -34,6 +35,10 @@ export async function importBatchExcel(file: File) {
 
   const response = await fetch(buildApiUrl("/api/v1/batch/import"), {
     method: "POST",
+    headers: {
+      "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
+    },
     body: formData,
   });
 
@@ -49,6 +54,9 @@ export async function exportBatchGeneration(items: BatchExcelItem[]) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
+      "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ items }),
   });
@@ -60,8 +68,12 @@ export async function exportBatchGeneration(items: BatchExcelItem[]) {
   return response.blob();
 }
 
-export async function exportRecordsExcel() {
-  const response = await fetch(buildApiUrl("/api/v1/batch/records/export"));
+export async function exportRecordsExcel(scope: "mine" | "all" = "mine") {
+  const response = await fetch(buildApiUrl(`/api/v1/batch/records/export?scope=${scope}`), {
+    headers: {
+      "X-Counselor-Id": getStoredCounselorId(),
+    },
+  });
   if (!response.ok) {
     throw new Error(await response.text());
   }
@@ -73,6 +85,8 @@ export async function exportReviewedBatch(items: ReviewedBatchItem[]) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ items }),
   });
@@ -101,6 +115,8 @@ export async function updateBatchSessionItem(
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(payload),
   });
@@ -121,6 +137,8 @@ export async function regenerateBatchSessionItem(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(payload),
   });
@@ -141,6 +159,7 @@ export async function rollbackBatchSessionItem(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Counselor-Id": getStoredCounselorId(),
     },
     body: JSON.stringify({ version_index: versionIndex }),
   });

@@ -1,19 +1,44 @@
 export type EvaluationScores = {
-  intent_safety?: number;
-  authentic_empathy?: number;
-  grounded_guidance?: number;
-  narrative_companionship?: number;
+  problem_risk_recognition?: number;
+  emotional_response_moderation?: number;
+  cognitive_reframing?: number;
+  advice_effectiveness?: number;
+  value_guidance_safety?: number;
+};
+
+export type EvaluationSafetyChecks = {
+  has_safety_issue?: boolean;
+  has_safety_advice?: boolean;
+  safety_advice_effective?: boolean;
+};
+
+export type EvaluationSafetyNotes = {
+  has_safety_issue?: string;
+  has_safety_advice?: string;
+  safety_advice_effective?: string;
 };
 
 export type ResponseEvaluation = {
   rubric_version: string;
   scores: EvaluationScores;
+  safety_checks?: EvaluationSafetyChecks;
+  safety_notes?: EvaluationSafetyNotes;
   total_score?: number;
   average_score?: number;
 };
 
+export type UserRiskAssessment = {
+  risk_level?: string;
+  level?: string;
+  confidence?: number;
+  categories?: string[];
+  signals?: string[];
+  reasoning?: string;
+};
+
 export type RecordItem = {
   id: number;
+  counselor_id: string;
   user_input: string;
   selected_persona_name: string;
   expert_annotation: string;
@@ -32,6 +57,7 @@ export type RecordListResponse = {
 
 export type RecordDetail = {
   id: number;
+  counselor_id: string;
   user_input: string;
   selected_persona_name: string;
   selected_style_config_json: Record<string, string>;
@@ -44,6 +70,7 @@ export type RecordDetail = {
   sample_reason: string;
   sample_tags_json: Record<string, unknown>;
   planner_labels_json: Record<string, unknown>;
+  risk_assessment_json: UserRiskAssessment | Record<string, unknown>;
   evaluation_json: ResponseEvaluation | Record<string, unknown>;
   sample_snapshot_json: Record<string, unknown>;
   created_at: string;
@@ -62,6 +89,7 @@ export type SaveRecordPayload = {
   rag_ready?: string;
   sample_reason?: string;
   sample_snapshot?: Record<string, unknown>;
+  risk_assessment?: UserRiskAssessment | Record<string, unknown>;
   evaluation?: ResponseEvaluation;
   source_annotations?: SourceAnnotation[];
   response_versions?: ResponseVersion[];
@@ -86,10 +114,12 @@ export type BatchExcelItem = {
   response_versions_json?: ResponseVersion[];
   sample_tags_json?: Record<string, unknown>;
   planner_labels_json?: Record<string, unknown>;
+  risk_assessment_json?: UserRiskAssessment | Record<string, unknown>;
   evaluation_json?: ResponseEvaluation | Record<string, unknown>;
   active_version_index?: number;
   status?: string;
   record_id?: number | null;
+  mail_thread_id?: number | null;
 };
 
 export type BatchExcelImportResponse = {
@@ -128,6 +158,28 @@ export type ResponseVersion = {
   created_at: string;
   source: string;
   source_annotations: SourceAnnotation[];
+  safety_review?: Record<string, unknown>;
+};
+
+export type MailThreadWorkspaceContext = {
+  kind?: string;
+  mail_thread_id?: number;
+  signature?: string;
+  response_preference?: string;
+  memory_summary?: string;
+  risk?: {
+    level?: string;
+    signals?: string[];
+    reasoning?: string;
+  };
+  transcript?: Array<{
+    id?: number;
+    sender_type?: string;
+    label?: string;
+    content?: string;
+    created_at?: string;
+  }>;
+  instruction?: string;
 };
 
 export type BatchSessionItem = {
@@ -151,15 +203,19 @@ export type BatchSessionItem = {
   response_versions_json: ResponseVersion[];
   sample_tags_json: Record<string, unknown>;
   planner_labels_json: Record<string, unknown>;
+  risk_assessment_json: UserRiskAssessment | Record<string, unknown>;
   evaluation_json: ResponseEvaluation | Record<string, unknown>;
   active_version_index: number;
   record_id: number | null;
+  mail_thread_id: number | null;
+  context_json: MailThreadWorkspaceContext | Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
 
 export type BatchSessionDetail = {
   id: number;
+  counselor_id: string;
   title: string;
   source_file_name: string;
   status: string;
@@ -173,6 +229,7 @@ export type BatchSessionDetail = {
 
 export type BatchSessionListItem = {
   id: number;
+  counselor_id: string;
   title: string;
   source_file_name: string;
   status: string;
@@ -201,6 +258,7 @@ export type BatchSessionItemUpdatePayload = {
   sample_reason: string;
   sample_tags: Record<string, unknown>;
   planner_labels: Record<string, unknown>;
+  risk_assessment?: UserRiskAssessment | Record<string, unknown>;
   evaluation: ResponseEvaluation;
   sample_snapshot: Record<string, unknown>;
   source_annotations: SourceAnnotation[];
@@ -208,6 +266,8 @@ export type BatchSessionItemUpdatePayload = {
   active_version_index: number;
   status: string;
   record_id?: number | null;
+  mail_thread_id?: number | null;
+  context?: MailThreadWorkspaceContext | Record<string, unknown>;
 };
 
 export type BatchSessionItemRegeneratePayload = {

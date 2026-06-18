@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 
+import { AuthProvider } from "./auth";
+
 export function AppProviders({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

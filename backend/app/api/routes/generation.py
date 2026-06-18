@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_orchestration_service
+from app.api.deps import get_orchestration_service, get_settings
+from app.core.config import Settings
 from app.schemas.generation import GenerateFromPlanRequest, GenerationRequest
 from app.services.orchestration_service import OrchestrationService
 
@@ -11,8 +12,19 @@ router = APIRouter(prefix="/generations", tags=["generations"])
 @router.post("/stream")
 async def stream_generation(
     payload: GenerationRequest,
+    settings: Settings = Depends(get_settings),
     orchestration_service: OrchestrationService = Depends(get_orchestration_service),
 ) -> StreamingResponse:
+    if payload.source_mode == "api" and (
+        settings.effective_planner_mode != "api" or not settings.doubao_api_key
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "真实回信模型未配置。请设置 MOCK_LLM=false、PLANNER_MODE=api、"
+                "GENERATOR_MODE=api、GPT_API_KEY 和 DOUBAO_API_KEY。"
+            ),
+        )
     headers = {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",

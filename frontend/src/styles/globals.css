@@ -17,9 +17,11 @@ body {
   color: var(--color-ink);
   font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
   line-height: 1.65;
-  background-image: radial-gradient(circle at 10% 12%, rgba(230, 239, 244, 0.92), transparent 30%),
-    radial-gradient(circle at 88% 10%, rgba(239, 226, 217, 0.72), transparent 22%),
-    linear-gradient(180deg, #f8f8f4 0%, #f2f2ee 100%);
+  background-color: #fffcff;
+  background-image: radial-gradient(circle at 9% 10%, rgba(226, 216, 255, 0.56), transparent 32%),
+    radial-gradient(circle at 84% 4%, rgba(255, 226, 240, 0.48), transparent 25%),
+    radial-gradient(circle at 78% 72%, rgba(210, 244, 236, 0.36), transparent 30%),
+    linear-gradient(135deg, #fffefe 0%, #fbf8ff 48%, #f7fffd 100%);
   background-attachment: fixed;
 }
 
@@ -38,10 +40,442 @@ textarea {
 }
 
 ::selection {
-  background: rgba(79, 110, 140, 0.18);
+  background: rgba(154, 123, 232, 0.22);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+.surface-glow {
+  position: relative;
+}
+
+.surface-glow::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(245, 240, 255, 0.12));
+  content: "";
+  mask: linear-gradient(#000, transparent 58%);
+}
+
+.lilac-gradient {
+  background-image: linear-gradient(135deg, #8b5cf6 0%, #c084fc 52%, #f0abfc 100%);
+}
+
+.lilac-text {
+  background: linear-gradient(135deg, #7c5ed8 0%, #a66be6 48%, #d66eaa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.mail-card {
+  min-height: 128px;
+}
+
+.pulse-soft {
+  animation: pulseSoft 1.8s ease-in-out infinite;
+}
+
+.typewriter-reply {
+  animation: replyFade 420ms ease-out both;
+}
+
+.reply-arrival {
+  position: relative;
+  overflow: hidden;
+}
+
+.reply-arrival::before {
+  pointer-events: none;
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle at 50% 48%, rgba(240, 171, 252, 0.2), transparent 34%);
+  content: "";
+  animation: arrivalGlow 2.4s ease-in-out infinite alternate;
+}
+
+.mailbox-glow {
+  position: relative;
+  box-shadow: 0 0 0 10px rgba(139, 92, 246, 0.05), 0 18px 40px rgba(139, 92, 246, 0.12);
+  animation: mailboxGlow 1.8s ease-in-out infinite alternate;
+}
+
+.reply-envelope {
+  position: relative;
+  height: 54px;
+  width: 78px;
+  overflow: hidden;
+  border: 2px solid rgba(139, 92, 246, 0.24);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, #fff1f8);
+  filter: drop-shadow(0 14px 18px rgba(120, 90, 200, 0.16));
+  animation: replyEnvelopeDrop 0.8s ease-out both;
+}
+
+.reply-envelope::before,
+.reply-envelope::after {
+  position: absolute;
+  top: -1px;
+  border-top: 28px solid transparent;
+  border-bottom: 28px solid transparent;
+  content: "";
+}
+
+.reply-envelope::before {
+  left: 0;
+  border-left: 40px solid rgba(139, 92, 246, 0.16);
+}
+
+.reply-envelope::after {
+  right: 0;
+  border-right: 40px solid rgba(240, 171, 252, 0.24);
+}
+
+.reply-envelope-flap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  height: 0;
+  width: 0;
+  border-left: 39px solid transparent;
+  border-right: 39px solid transparent;
+  border-top: 30px solid rgba(139, 92, 246, 0.28);
+  transform-origin: top center;
+}
+
+.reply-envelope-opening .reply-envelope-flap {
+  animation: openEnvelopeFlap 0.7s ease-in-out both;
+}
+
+.reply-unfold {
+  transform-origin: top center;
+}
+
+.reply-unfolding {
+  animation: unfoldLetter 0.72s ease-in-out both;
+}
+
+.typing-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: #8b5cf6;
+  animation: cursorBlink 0.85s steps(2, start) infinite;
+}
+
+.mailbox-scene {
+  position: relative;
+}
+
+.mailbox-scene::before {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.9) 0 1px, transparent 2px),
+    radial-gradient(circle at 76% 18%, rgba(183, 156, 247, 0.34) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 78%, rgba(255, 198, 221, 0.34) 0 1px, transparent 2px);
+  background-size: 120px 120px, 170px 170px, 150px 150px;
+  content: "";
+  opacity: 0.8;
+}
+
+.letter-paper,
+.reply-paper {
+  background-image:
+    linear-gradient(rgba(126, 105, 184, 0.07) 1px, transparent 1px),
+    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.78), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 250, 254, 0.86));
+  background-size: 100% 32px, auto, auto;
+}
+
+.mail-journey {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.floating-lights::before,
+.floating-lights::after {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    120px 46px 0 rgba(183, 156, 247, 0.2),
+    260px 118px 0 rgba(255, 198, 221, 0.24),
+    470px 34px 0 rgba(167, 231, 220, 0.24),
+    640px 140px 0 rgba(183, 156, 247, 0.18);
+  content: "";
+  height: 7px;
+  left: 12%;
+  top: 24%;
+  width: 7px;
+  animation: floatLights 5s ease-in-out infinite alternate;
+}
+
+.floating-lights::after {
+  animation-delay: -2s;
+  left: 24%;
+  top: 42%;
+  transform: scale(0.72);
+}
+
+.mail-route {
+  position: absolute;
+  inset: 118px 24px auto;
+  height: 270px;
+}
+
+.traveler {
+  position: absolute;
+  left: 9%;
+  top: 115px;
+  z-index: 2;
+  filter: drop-shadow(0 18px 20px rgba(108, 83, 171, 0.18));
+  transition:
+    left 1.7s ease-in-out,
+    top 1.7s ease-in-out,
+    transform 1.7s ease-in-out;
+}
+
+.traveler-folding {
+  left: 9%;
+  top: 118px;
+  transform: scale(0.9) rotate(-3deg);
+}
+
+.traveler-sending {
+  left: 48%;
+  top: 44px;
+  transform: scale(0.94) rotate(8deg);
+}
+
+.traveler-reading {
+  left: 80%;
+  top: 108px;
+  transform: scale(0.82) rotate(-5deg);
+}
+
+.traveler-replying {
+  left: 74%;
+  top: 82px;
+  transform: scale(0.9) rotate(5deg);
+}
+
+.traveler-received {
+  left: 13%;
+  top: 112px;
+  transform: scale(1.08) rotate(-2deg);
+  animation: mailArrive 0.6s ease-in-out 1.65s both;
+}
+
+.envelope-shape {
+  position: relative;
+  height: 58px;
+  width: 86px;
+  overflow: hidden;
+  border: 2px solid rgba(154, 123, 232, 0.28);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, #fff1f8);
+}
+
+.envelope-shape::before,
+.envelope-shape::after {
+  position: absolute;
+  border-top: 30px solid transparent;
+  border-bottom: 30px solid transparent;
+  content: "";
+  top: -1px;
+}
+
+.envelope-shape::before {
+  border-left: 44px solid rgba(183, 156, 247, 0.18);
+  left: 0;
+}
+
+.envelope-shape::after {
+  border-right: 44px solid rgba(255, 198, 221, 0.28);
+  right: 0;
+}
+
+.envelope-flap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  width: 0;
+  border-left: 43px solid transparent;
+  border-right: 43px solid transparent;
+  border-top: 32px solid rgba(154, 123, 232, 0.25);
+  transform-origin: top center;
+  animation: flapBreathe 2.2s ease-in-out infinite;
+}
+
+.mailbox {
+  position: absolute;
+  bottom: 20px;
+  z-index: 1;
+  border: 1px solid rgba(126, 105, 184, 0.22);
+  border-radius: 18px 18px 8px 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 239, 255, 0.82));
+  color: rgba(51, 47, 80, 0.62);
+  font-size: 13px;
+  padding: 28px 18px 12px;
+}
+
+.mailbox::before {
+  position: absolute;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(135deg, rgba(183, 156, 247, 0.72), rgba(255, 198, 221, 0.7));
+  content: "";
+  height: 28px;
+  left: 12px;
+  right: 12px;
+  top: -12px;
+}
+
+.mailbox-left {
+  left: 3%;
+}
+
+.mailbox-right {
+  right: 5%;
+}
+
+@keyframes floatLights {
+  from {
+    opacity: 0.45;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.9;
+    transform: translate3d(18px, -16px, 0);
+  }
+}
+
+@keyframes flapBreathe {
+  0%,
+  100% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(24deg);
+  }
+}
+
+@keyframes mailArrive {
+  0%,
+  100% {
+    filter: drop-shadow(0 18px 20px rgba(108, 83, 171, 0.18));
+  }
+  45% {
+    filter: drop-shadow(0 0 26px rgba(255, 198, 221, 0.9));
+    transform: translateX(2px) scale(1.12) rotate(1deg);
+  }
+}
+
+@keyframes pulseSoft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.18);
+    opacity: 0.72;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes replyFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes arrivalGlow {
+  from {
+    opacity: 0.48;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 0.95;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes mailboxGlow {
+  from {
+    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0.04), 0 18px 40px rgba(139, 92, 246, 0.1);
+  }
+  to {
+    box-shadow: 0 0 0 16px rgba(139, 92, 246, 0.02), 0 22px 46px rgba(240, 171, 252, 0.18);
+  }
+}
+
+@keyframes replyEnvelopeDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-80px) rotate(-8deg);
+  }
+  72% {
+    transform: translateY(6px) rotate(2deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes openEnvelopeFlap {
+  from {
+    transform: rotateX(0deg);
+  }
+  to {
+    transform: rotateX(165deg);
+  }
+}
+
+@keyframes unfoldLetter {
+  from {
+    opacity: 0;
+    transform: scaleY(0.15) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1) translateY(0);
+  }
+}
+
+@keyframes cursorBlink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .mail-route {
+    inset-inline: 8px;
+  }
+
+  .traveler-sending {
+    left: 42%;
+  }
+
+  .traveler-reading,
+  .traveler-replying {
+    left: 70%;
+  }
 }

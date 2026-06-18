@@ -8,6 +8,9 @@ from app.api.routes.personas import router as personas_router
 from app.api.routes.records import router as records_router
 from app.api.routes.batch import router as batch_router
 from app.api.routes.rag import router as rag_router
+from app.api.routes.user_letters import router as user_letters_router
+from app.api.routes.mail_threads import router as mail_threads_router
+from app.api.routes.auth import router as auth_router
 from app.core.config import Settings, get_settings
 from app.db.session import build_engine, build_session_factory, init_db
 from app.services.batch_session_service import BatchSessionService
@@ -18,6 +21,10 @@ from app.services.persona_service import PersonaService
 from app.services.planner_service import PlannerService
 from app.services.record_service import RecordService
 from app.services.rag_service import RagService
+from app.services.user_letter_service import UserLetterService
+from app.services.mail_thread_service import MailThreadService
+from app.services.safety_service import SafetyService
+from app.services.auth_service import AuthService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -50,16 +57,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         seed_path=settings.rag_seed_path,
         seed_enabled=settings.rag_seed_enabled,
     )
+    safety_service = SafetyService()
     orchestration_service = OrchestrationService(
         settings=settings,
         planner_service=planner_service,
         generator_service=generator_service,
         rag_service=rag_service,
         session_maker=session_maker,
+        safety_service=safety_service,
     )
     record_service = RecordService(rag_service=rag_service)
     excel_service = ExcelService()
     batch_session_service = BatchSessionService(rag_service=rag_service)
+    user_letter_service = UserLetterService(settings=settings)
+    mail_thread_service = MailThreadService(
+        settings=settings,
+        safety_service=safety_service,
+        orchestration_service=orchestration_service,
+        record_service=record_service,
+    )
+    auth_service = AuthService(settings=settings)
 
     app.state.settings = settings
     app.state.engine = engine
@@ -73,6 +90,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.record_service = record_service
     app.state.excel_service = excel_service
     app.state.batch_session_service = batch_session_service
+    app.state.user_letter_service = user_letter_service
+    app.state.safety_service = safety_service
+    app.state.mail_thread_service = mail_thread_service
+    app.state.auth_service = auth_service
 
     api_router = APIRouter(prefix=settings.api_v1_prefix)
     api_router.include_router(health_router)
@@ -81,6 +102,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(records_router)
     api_router.include_router(batch_router)
     api_router.include_router(rag_router)
+    api_router.include_router(user_letters_router)
+    api_router.include_router(mail_threads_router)
+    api_router.include_router(auth_router)
     app.include_router(api_router)
 
     return app

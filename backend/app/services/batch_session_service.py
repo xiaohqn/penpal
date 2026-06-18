@@ -40,9 +40,11 @@ class BatchSessionService:
         self,
         db: Session,
         payload: BatchSessionCreateRequest,
+        counselor_id: str = "default",
     ) -> BatchSessionDetailResponse:
         title = (payload.title or "").strip() or self._build_default_title(payload.source_file_name)
         session = BatchSession(
+            counselor_id=counselor_id,
             title=title,
             source_file_name=payload.source_file_name,
             status="in_progress",
@@ -59,6 +61,9 @@ class BatchSessionService:
                     session_id=session.id,
                     row_number=item.row_number,
                     user_input=item.user_input,
+                    mail_thread_id=item.mail_thread_id,
+                    context_json=item.context,
+                    risk_assessment_json=(item.context.get("risk") if isinstance(item.context, dict) else {}) or {},
                     status="pending",
                 )
             )
@@ -69,15 +74,22 @@ class BatchSessionService:
             session.current_item_id = items[0].id
 
         db.commit()
-        return self.get_session_detail(db, session.id)
+        return self.get_session_detail(db, session.id, counselor_id=counselor_id)
 
-    def list_sessions(self, db: Session) -> BatchSessionListResponse:
-        total = db.scalar(select(func.count()).select_from(BatchSession)) or 0
-        sessions = db.scalars(select(BatchSession).order_by(desc(BatchSession.updated_at))).all()
+    def list_sessions(self, db: Session, counselor_id: str = "default") -> BatchSessionListResponse:
+        total = db.scalar(
+            select(func.count()).select_from(BatchSession).where(BatchSession.counselor_id == counselor_id)
+        ) or 0
+        sessions = db.scalars(
+            select(BatchSession)
+            .where(BatchSession.counselor_id == counselor_id)
+            .order_by(desc(BatchSession.updated_at))
+        ).all()
         return BatchSessionListResponse(
             items=[
                 BatchSessionListItem(
                     id=session.id,
+                    counselor_id=session.counselor_id,
                     title=session.title,
                     source_file_name=session.source_file_name,
                     status=session.status,
@@ -92,17 +104,23 @@ class BatchSessionService:
             total=total,
         )
 
-    def get_session_detail(self, db: Session, session_id: int) -> BatchSessionDetailResponse:
+    def get_session_detail(
+        self,
+        db: Session,
+        session_id: int,
+        counselor_id: str = "default",
+    ) -> BatchSessionDetailResponse:
         session = db.scalar(
             select(BatchSession)
             .options(selectinload(BatchSession.items))
-            .where(BatchSession.id == session_id)
+            .where(BatchSession.id == session_id, BatchSession.counselor_id == counselor_id)
         )
         if session is None:
             raise ValueError("Batch session not found")
 
         return BatchSessionDetailResponse(
             id=session.id,
+            counselor_id=session.counselor_id,
             title=session.title,
             source_file_name=session.source_file_name,
             status=session.status,
@@ -120,8 +138,9 @@ class BatchSessionService:
         session_id: int,
         item_id: int,
         payload: BatchSessionItemUpdateRequest,
+        counselor_id: str = "default",
     ) -> BatchSessionDetailResponse:
-        item = self._get_item(db, session_id, item_id)
+        item = self._get_item(db, session_id, item_id, counselor_id=counselor_id)
         item.selected_persona_names_json = payload.selected_persona_names
         item.selected_persona_name = payload.selected_persona_name
         item.selected_style_config_json = payload.selected_style_config
@@ -132,6 +151,7 @@ class BatchSessionService:
         item.expert_annotation = payload.expert_annotation
         item.rag_ready = self._derive_rag_ready(payload.expert_annotation, payload.source_annotations)
         item.sample_reason = payload.sample_reason
+        item.risk_assessment_json = payload.risk_assessment
         item.planner_labels_json = payload.planner_labels or self.rag_service.build_planner_labels(payload.planner_output)
         item.sample_tags_json = payload.sample_tags or self.rag_service.build_sample_tags(
             user_input=item.user_input,
@@ -146,9 +166,11 @@ class BatchSessionService:
         item.active_version_index = payload.active_version_index
         item.status = payload.status
         item.record_id = payload.record_id
+        item.mail_thread_id = payload.mail_thread_id
+        item.context_json = payload.context
         self._refresh_session_progress(db, item.session_id, preferred_current_item_id=item.id)
         db.commit()
-        return self.get_session_detail(db, session_id)
+        return self.get_session_detail(db, session_id, counselor_id=counselor_id)
 
     def append_response_version(
         self,
@@ -165,8 +187,9 @@ class BatchSessionService:
         selected_style_config: dict[str, Any],
         source_annotations: list[dict[str, Any]],
         expert_annotation: str,
+        counselor_id: str = "default",
     ) -> BatchSessionDetailResponse:
-        item = self._get_item(db, session_id, item_id)
+        item = self._get_item(db, session_id, item_id, counselor_id=counselor_id)
         versions = list(item.response_versions_json or [])
         versions.append(version)
         item.response_versions_json = versions
@@ -184,7 +207,7 @@ class BatchSessionService:
         item.status = "in_progress"
         self._refresh_session_progress(db, item.session_id, preferred_current_item_id=item.id)
         db.commit()
-        return self.get_session_detail(db, session_id)
+        return self.get_session_detail(db, session_id, counselor_id=counselor_id)
 
     def rollback_item_version(
         self,
@@ -192,8 +215,9 @@ class BatchSessionService:
         session_id: int,
         item_id: int,
         version_index: int,
+        counselor_id: str = "default",
     ) -> BatchSessionDetailResponse:
-        item = self._get_item(db, session_id, item_id)
+        item = self._get_item(db, session_id, item_id, counselor_id=counselor_id)
         versions = list(item.response_versions_json or [])
         if version_index < 0 or version_index >= len(versions):
             raise ValueError("Version index out of range")
@@ -205,13 +229,22 @@ class BatchSessionService:
         item.source_annotations_json = list(version.get("source_annotations", item.source_annotations_json))
         self._refresh_session_progress(db, item.session_id, preferred_current_item_id=item.id)
         db.commit()
-        return self.get_session_detail(db, session_id)
+        return self.get_session_detail(db, session_id, counselor_id=counselor_id)
 
-    def _get_item(self, db: Session, session_id: int, item_id: int) -> BatchSessionItem:
+    def _get_item(
+        self,
+        db: Session,
+        session_id: int,
+        item_id: int,
+        counselor_id: str = "default",
+    ) -> BatchSessionItem:
         item = db.scalar(
-            select(BatchSessionItem).where(
+            select(BatchSessionItem)
+            .join(BatchSession)
+            .where(
                 BatchSessionItem.id == item_id,
                 BatchSessionItem.session_id == session_id,
+                BatchSession.counselor_id == counselor_id,
             )
         )
         if item is None:
@@ -270,12 +303,15 @@ class BatchSessionService:
             sample_reason=item.sample_reason,
             sample_tags_json=item.sample_tags_json or {},
             planner_labels_json=item.planner_labels_json or {},
+            risk_assessment_json=item.risk_assessment_json or {},
             evaluation_json=item.evaluation_json or {},
             sample_snapshot_json=item.sample_snapshot_json or {},
             source_annotations_json=item.source_annotations_json or [],
             response_versions_json=item.response_versions_json or [],
             active_version_index=item.active_version_index,
             record_id=item.record_id,
+            mail_thread_id=item.mail_thread_id,
+            context_json=item.context_json or {},
             created_at=item.created_at,
             updated_at=item.updated_at,
         )

@@ -17,6 +17,7 @@ class ConsultationRecordSaveRequest(BaseModel):
     sample_reason: str = ""
     sample_tags: dict[str, Any] = Field(default_factory=dict)
     planner_labels: dict[str, Any] = Field(default_factory=dict)
+    risk_assessment: dict[str, Any] = Field(default_factory=dict)
     evaluation: dict[str, Any] = Field(default_factory=dict)
     sample_snapshot: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
@@ -50,6 +51,7 @@ class ConsultationRecordResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    counselor_id: str
     user_input: str
     selected_persona_name: str
     selected_style_config_json: dict[str, Any]
@@ -62,6 +64,7 @@ class ConsultationRecordResponse(BaseModel):
     sample_reason: str
     sample_tags_json: dict[str, Any]
     planner_labels_json: dict[str, Any]
+    risk_assessment_json: dict[str, Any]
     evaluation_json: dict[str, Any]
     sample_snapshot_json: dict[str, Any]
     source_annotations_json: list[dict[str, Any]]
@@ -74,6 +77,7 @@ class ConsultationRecordResponse(BaseModel):
 
 class ConsultationRecordListItem(BaseModel):
     id: int
+    counselor_id: str
     user_input: str
     selected_persona_name: str
     expert_annotation: str
@@ -81,6 +85,7 @@ class ConsultationRecordListItem(BaseModel):
     sample_reason: str
     sample_tags_json: dict[str, Any]
     planner_labels_json: dict[str, Any]
+    risk_assessment_json: dict[str, Any]
     evaluation_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -96,6 +101,8 @@ class ConsultationRecordListResponse(BaseModel):
 class BatchExcelRow(BaseModel):
     row_number: int
     user_input: str
+    mail_thread_id: int | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
     selected_persona_names: list[str] = Field(default_factory=list)
 
 
@@ -126,6 +133,7 @@ class ReviewedBatchItem(BaseModel):
     sample_reason: str = ""
     sample_tags: dict[str, Any] = Field(default_factory=dict)
     planner_labels: dict[str, Any] = Field(default_factory=dict)
+    risk_assessment: dict[str, Any] = Field(default_factory=dict)
     evaluation: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
     active_version_index: int = 0
@@ -158,6 +166,7 @@ class BatchSessionCreateRequest(BaseModel):
 
 class BatchSessionListItem(BaseModel):
     id: int
+    counselor_id: str
     title: str
     source_file_name: str
     status: str
@@ -191,18 +200,22 @@ class BatchSessionItemDetail(BaseModel):
     sample_reason: str
     sample_tags_json: dict[str, Any]
     planner_labels_json: dict[str, Any]
+    risk_assessment_json: dict[str, Any]
     evaluation_json: dict[str, Any]
     sample_snapshot_json: dict[str, Any]
     source_annotations_json: list[dict[str, Any]]
     response_versions_json: list[dict[str, Any]]
     active_version_index: int
     record_id: int | None
+    mail_thread_id: int | None
+    context_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
 
 class BatchSessionDetailResponse(BaseModel):
     id: int
+    counselor_id: str
     title: str
     source_file_name: str
     status: str
@@ -227,6 +240,7 @@ class BatchSessionItemUpdateRequest(BaseModel):
     sample_reason: str = ""
     sample_tags: dict[str, Any] = Field(default_factory=dict)
     planner_labels: dict[str, Any] = Field(default_factory=dict)
+    risk_assessment: dict[str, Any] = Field(default_factory=dict)
     evaluation: dict[str, Any] = Field(default_factory=dict)
     sample_snapshot: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
@@ -234,6 +248,8 @@ class BatchSessionItemUpdateRequest(BaseModel):
     active_version_index: int = 0
     status: str = "in_progress"
     record_id: int | None = None
+    mail_thread_id: int | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class BatchSessionItemRegenerateRequest(BaseModel):
