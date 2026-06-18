@@ -9,6 +9,7 @@ def build_test_client(tmp_path):
         database_url=f"sqlite:///{tmp_path / 'mail_threads.db'}",
         mock_llm=True,
         counselor_features_enabled=True,
+        active_counselor_ids=["counselor-a", "counselor-risk", "counselor-crisis"],
         visitor_invite_codes=["visitor-test"],
         counselor_invite_codes=["counselor-test"],
     )
@@ -49,6 +50,27 @@ def test_register_requires_matching_invite_code(tmp_path):
     assert response.json()["detail"] == "邀请码无效"
 
 
+def test_counselor_can_list_accounts_and_active_human_letter_status(tmp_path):
+    client = build_test_client(tmp_path)
+    counselor_token = register(client, "counselor-a", role="counselor")
+    register(client, "counselor-b", role="counselor")
+    register(client, "visitor-list")
+
+    response = client.get(
+        "/api/v1/auth/accounts",
+        headers={"Authorization": f"Bearer {counselor_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["visitor_count"] == 1
+    assert data["counselor_count"] == 2
+    assert data["active_counselor_count"] == 1
+    active_map = {item["username"]: item["active_for_human_letters"] for item in data["items"]}
+    assert active_map["counselor-a"] is True
+    assert active_map["counselor-b"] is False
+
+
 def test_mail_thread_multiturn_and_memory(tmp_path):
     client = build_test_client(tmp_path)
     user_token = register(client, "visitor-a")
@@ -81,11 +103,13 @@ def test_mail_thread_multiturn_and_memory(tmp_path):
     updated = followup_response.json()
     assert len(updated["messages"]) == 4
     assert "最近一次来信重点" in updated["memory"]["summary"]
+    assert "心灵笔友 AI 陪伴员" in updated["messages"][-1]["content"]
 
 
 def test_counselor_can_reply_to_assigned_thread(tmp_path):
     client = build_test_client(tmp_path)
     counselor_token = register(client, "counselor-a", role="counselor")
+    register(client, "counselor-b", role="counselor")
     user_token = register(client, "visitor-b")
 
     create_response = client.post(
@@ -99,7 +123,9 @@ def test_counselor_can_reply_to_assigned_thread(tmp_path):
         },
     )
     assert create_response.status_code == 201
-    thread_id = create_response.json()["id"]
+    created_thread = create_response.json()
+    thread_id = created_thread["id"]
+    assert created_thread["assigned_counselor_id"] == "counselor-a"
 
     assigned_response = client.get(
         "/api/v1/mail-threads/assigned/mine",
@@ -171,6 +197,7 @@ def test_crisis_letter_gets_crisis_response(tmp_path):
     assert data["reply_mode"] == "human"
     assert data["risk_assessments"][0]["risk_level"] == "CRISIS"
     assert "紧急服务" in data["messages"][-1]["content"]
+    assert "心灵笔友 AI 陪伴员" in data["messages"][-1]["content"]
 
 
 def test_high_risk_letter_does_not_transfer_when_counselor_features_disabled(tmp_path):
@@ -214,3 +241,4 @@ def test_high_risk_letter_does_not_transfer_when_counselor_features_disabled(tmp
     assert data["status"] == "waiting_user"
     assert data["assigned_counselor_id"] is None
     assert "不能替代现实中的专业支持" in data["messages"][-1]["content"]
+    assert "心灵笔友 AI 陪伴员" in data["messages"][-1]["content"]

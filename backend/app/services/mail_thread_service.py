@@ -19,6 +19,8 @@ from app.services.orchestration_service import OrchestrationService
 from app.services.record_service import RecordService
 from app.services.safety_service import RISK_ORDER, SafetyAssessment, SafetyService, max_risk_level
 
+AI_REPLY_SIGNATURE = "心灵笔友 AI 陪伴员"
+
 
 def _datetime_sort_value(value: datetime) -> datetime:
     if value.tzinfo is None:
@@ -78,6 +80,7 @@ class MailThreadService:
             crisis_text = self.safety_service.crisis_reply(
                 counselor_available=self.settings.counselor_features_enabled
             )
+            crisis_text = self._with_ai_signature(crisis_text)
             reply_assessment = self.safety_service.assess_reply(crisis_text)
             db.add(
                 MailMessage(
@@ -93,6 +96,7 @@ class MailThreadService:
             self._record_risk(db, user_id, thread.id, ai_message.id if ai_message else None, "ai_reply", reply_assessment)
         elif forced_human and not self.settings.counselor_features_enabled:
             reply_text = self.safety_service.safe_fallback_reply(counselor_available=False)
+            reply_text = self._with_ai_signature(reply_text)
             reply_assessment = self.safety_service.assess_reply(reply_text)
             thread.status = "waiting_user"
             db.add(
@@ -113,11 +117,13 @@ class MailThreadService:
                 latest_user_content=payload.content,
                 fallback_preference=payload.response_preference,
             )
+            reply_text = self._with_ai_signature(reply_text)
             reply_assessment = self.safety_service.assess_reply(reply_text)
             if RISK_ORDER[reply_assessment.risk_level] >= RISK_ORDER["HIGH"]:
                 reply_text = self.safety_service.safe_fallback_reply(
                     counselor_available=self.settings.counselor_features_enabled
                 )
+                reply_text = self._with_ai_signature(reply_text)
                 reply_assessment = self.safety_service.assess_reply(reply_text)
                 if self.settings.counselor_features_enabled:
                     thread.reply_mode = "human"
@@ -199,6 +205,7 @@ class MailThreadService:
                 crisis_text = self.safety_service.crisis_reply(
                     counselor_available=self.settings.counselor_features_enabled
                 )
+                crisis_text = self._with_ai_signature(crisis_text)
                 db.add(
                     MailMessage(
                         thread_id=thread.id,
@@ -224,6 +231,7 @@ class MailThreadService:
                 if crisis
                 else self.safety_service.safe_fallback_reply(counselor_available=False)
             )
+            reply_text = self._with_ai_signature(reply_text)
             db.add(
                 MailMessage(
                     thread_id=thread.id,
@@ -250,11 +258,13 @@ class MailThreadService:
                 latest_user_content=payload.content,
                 fallback_preference=thread.response_preference,
             )
+            reply_text = self._with_ai_signature(reply_text)
             reply_assessment = self.safety_service.assess_reply(reply_text)
             if RISK_ORDER[reply_assessment.risk_level] >= RISK_ORDER["HIGH"]:
                 reply_text = self.safety_service.safe_fallback_reply(
                     counselor_available=self.settings.counselor_features_enabled
                 )
+                reply_text = self._with_ai_signature(reply_text)
                 reply_assessment = self.safety_service.assess_reply(reply_text)
                 if self.settings.counselor_features_enabled:
                     thread.reply_mode = "human"
@@ -570,16 +580,22 @@ class MailThreadService:
     def _pick_counselor(self, db: Session) -> str:
         if not self.settings.counselor_features_enabled:
             raise ValueError("当前暂未开放咨询师人工回复")
-        counselor_usernames = list(db.scalars(select(Account.username).where(Account.role == "counselor")).all())
+        counselor_usernames = self._active_counselor_usernames(db)
         if not counselor_usernames:
-            raise ValueError("目前没有已注册的咨询师可以接收人工来信")
+            raise ValueError("当前没有白名单内咨询师可以接收人工来信")
         return random.choice(counselor_usernames)
 
     def _pick_counselor_or_none(self, db: Session) -> str | None:
         if not self.settings.counselor_features_enabled:
             return None
-        counselor_usernames = list(db.scalars(select(Account.username).where(Account.role == "counselor")).all())
+        counselor_usernames = self._active_counselor_usernames(db)
         return random.choice(counselor_usernames) if counselor_usernames else None
+
+    def _active_counselor_usernames(self, db: Session) -> list[str]:
+        query = select(Account.username).where(Account.role == "counselor")
+        if self.settings.active_counselor_ids:
+            query = query.where(Account.username.in_(self.settings.active_counselor_ids))
+        return list(db.scalars(query).all())
 
     async def _generate_ai_reply(self, thread: MailThread, latest_user_content: str, fallback_preference: str) -> str:
         if self.orchestration_service is None:
@@ -596,6 +612,15 @@ class MailThreadService:
         if not drafts:
             raise ValueError("AI 暂时没有生成回信，请稍后再试")
         return str(drafts[0].get("response") or "").strip()
+
+    def _with_ai_signature(self, reply_text: str) -> str:
+        stripped = reply_text.strip()
+        if not stripped:
+            return stripped
+        normalized_signature = f"——{AI_REPLY_SIGNATURE}"
+        if AI_REPLY_SIGNATURE in stripped:
+            return stripped
+        return f"{stripped}\n\n{normalized_signature}"
 
     def _build_ai_generation_input(self, thread: MailThread, latest_user_content: str, preference: str) -> str:
         messages = sorted(thread.messages, key=lambda message: (_datetime_sort_value(message.created_at), message.id))

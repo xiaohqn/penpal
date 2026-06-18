@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+
+from app.schemas.time import serialize_datetime
 
 
 class UserLetterCreateRequest(BaseModel):
@@ -27,6 +29,10 @@ class UserLetterCreateRequest(BaseModel):
 
 class UserLetterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetimes(self, value: datetime) -> str:
+        return serialize_datetime(value)
 
     id: int
     user_id: str

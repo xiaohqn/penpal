@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models import Account, AuthSession
-from app.schemas.auth import AuthResponse, AuthUserResponse, RegisterRequest
+from app.schemas.auth import AccountListItem, AccountListResponse, AuthResponse, AuthUserResponse, RegisterRequest
+
+
+def _serialize_datetime(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
 
 
 class AuthService:
@@ -52,6 +58,30 @@ class AuthService:
         response = self._create_session(db, account)
         db.commit()
         return response
+
+    def list_accounts(self, db: Session) -> AccountListResponse:
+        accounts = list(db.scalars(select(Account).order_by(Account.role, Account.created_at.desc(), Account.id.desc())).all())
+        active_ids = set(self.settings.active_counselor_ids)
+        items = [
+            AccountListItem(
+                id=account.id,
+                username=account.username,
+                display_name=account.display_name,
+                role=account.role,
+                active_for_human_letters=account.role == "counselor" and account.username in active_ids,
+                created_at=_serialize_datetime(account.created_at),
+            )
+            for account in accounts
+        ]
+        return AccountListResponse(
+            items=items,
+            total=len(items),
+            visitor_count=sum(1 for account in accounts if account.role == "visitor"),
+            counselor_count=sum(1 for account in accounts if account.role == "counselor"),
+            active_counselor_count=sum(
+                1 for account in accounts if account.role == "counselor" and account.username in active_ids
+            ),
+        )
 
     def authenticate(self, db: Session, token: str) -> Account | None:
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()

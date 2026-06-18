@@ -1,16 +1,28 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.schemas.record import BatchSessionDetailResponse
+from app.schemas.time import serialize_datetime
+
+
+FROM_ATTRIBUTES_CONFIG = ConfigDict(from_attributes=True)
+
+
+class DateTimeResponseModel(BaseModel):
+    model_config = FROM_ATTRIBUTES_CONFIG
+
+    @field_serializer("*", when_used="json")
+    def serialize_datetimes(self, value: object) -> object:
+        if isinstance(value, datetime):
+            return serialize_datetime(value)
+        return value
 
 
 RESPONSE_PREFERENCES = {"温柔陪伴", "理性分析", "启发引导"}
 
 
-class MailMessageResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class MailMessageResponse(DateTimeResponseModel):
     id: int
     thread_id: int
     sender_type: str
@@ -21,9 +33,7 @@ class MailMessageResponse(BaseModel):
     updated_at: datetime
 
 
-class ConversationMemoryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ConversationMemoryResponse(DateTimeResponseModel):
     id: int
     thread_id: int
     user_id: str
@@ -32,9 +42,7 @@ class ConversationMemoryResponse(BaseModel):
     updated_at: datetime
 
 
-class RiskAssessmentResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class RiskAssessmentResponse(DateTimeResponseModel):
     id: int
     user_id: str
     thread_id: int
@@ -49,9 +57,7 @@ class RiskAssessmentResponse(BaseModel):
     created_at: datetime
 
 
-class MailThreadResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class MailThreadResponse(DateTimeResponseModel):
     id: int
     user_id: str
     signature: str

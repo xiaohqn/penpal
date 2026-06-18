@@ -36,3 +36,20 @@ class AuthUserResponse(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: AuthUserResponse
+
+
+class AccountListItem(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    role: str
+    active_for_human_letters: bool = False
+    created_at: str
+
+
+class AccountListResponse(BaseModel):
+    items: list[AccountListItem]
+    total: int
+    visitor_count: int
+    counselor_count: int
+    active_counselor_count: int

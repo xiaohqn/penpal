@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     counselor_features_enabled: bool = True
     visitor_invite_codes: list[str] = Field(default_factory=list)
     counselor_invite_codes: list[str] = Field(default_factory=list)
+    active_counselor_ids: list[str] = Field(default_factory=list)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -70,7 +71,7 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("visitor_invite_codes", "counselor_invite_codes", mode="before")
+    @field_validator("visitor_invite_codes", "counselor_invite_codes", "active_counselor_ids", mode="before")
     @classmethod
     def parse_invite_codes(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
