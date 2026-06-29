@@ -21,23 +21,20 @@ export function ResponseVersionPanel({
   onRollback,
 }: Props) {
   return (
-    <section className="rounded-[28px] border border-line bg-white/78 p-6 shadow-soft">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-[22px] border border-line bg-white/78 p-4 shadow-soft">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.22em] text-moss">版本管理</p>
-          <h2 className="mt-2 font-serif text-3xl text-ink">基于批注重生成并随时回退</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-7 text-ink/68">
-            AI 回复里的高亮批注和专家说明会被纳入新的生成上下文。系统会保留每次回复版本，便于专家不满意时快速回退。
-          </p>
+          <p className="text-xs uppercase tracking-[0.18em] text-moss">版本管理</p>
+          <h2 className="mt-1 font-serif text-xl text-ink">重新生成</h2>
         </div>
         <button
           type="button"
           onClick={onRegenerate}
           disabled={!canRegenerate || regenerating}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-amber px-5 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-amber/45"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-amber px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-amber/45"
         >
           <GitBranchPlus size={16} />
-          {regenerating ? "重生成中..." : "基于批注重新生成"}
+          {regenerating ? "生成中..." : "重新生成"}
         </button>
       </div>
 
@@ -89,8 +86,8 @@ export function ResponseVersionPanel({
             })}
         </div>
       ) : (
-        <div className="mt-5 rounded-[24px] border border-dashed border-line bg-paper/68 px-4 py-5 text-sm leading-7 text-ink/62">
-          当前还没有版本历史。完成一轮保存或基于批注重新生成后，这里会开始记录每次回复版本。
+        <div className="mt-4 rounded-[18px] border border-dashed border-line bg-paper/68 px-4 py-4 text-sm leading-7 text-ink/62">
+          暂无版本历史。
         </div>
       )}
     </section>

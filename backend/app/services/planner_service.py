@@ -27,6 +27,7 @@ class PlannerService:
                 {"role": "user", "content": f"【用户来信】\n{user_input}"},
             ],
             temperature=0.2,
+            timeout=self.settings.planner_timeout_seconds,
         )
         parsed = safe_json_parse(raw)
         if not parsed:
@@ -54,10 +55,10 @@ class PlannerService:
             "value_guidance": "把问题和个人价值分开；遇到危险念头时，求助是保护自己，不是添麻烦。",
             "persona_strategy": (
                 f"以{style_summary['persona_name']}的风格写作，突出"
-                f"{style_summary['empathy']}式共情、{style_summary['advice']}式建议与"
+                f"{style_summary['empathy']}式共情、{style_summary['advice']}式下一步引导与"
                 f"{style_summary['cognitive']}式认知介入。"
             ),
-            "response_focus": "先看见来信者仍想把生活过好的正面动机，再把问题和自我价值分开，最后落到一个具体可尝试的小动作。",
+            "response_focus": "先看见来信者仍想把生活过好的正面动机，再把问题和自我价值分开，并收束到一个具体可尝试的小动作。",
             "story_plan": {
                 "use_story": style_summary["narrative"] == "启发故事",
                 "story_type": "真实人物故事/学生近似案例" if style_summary["narrative"] == "启发故事" else "不讲故事",
@@ -83,7 +84,7 @@ class PlannerService:
                 "过度诗化的比喻",
             ],
             "generation_plan": (
-                "写成自然书信，不要像清单，也不要像评估报告。先陪伴，再解释，最后落到可以执行的小动作。"
+                "写成自然书信，不要像清单，也不要像评估报告。先陪伴，再解释，把可以执行的小动作自然放进段落里。"
             ),
             "style_summary": style_summary,
             "raw": "",

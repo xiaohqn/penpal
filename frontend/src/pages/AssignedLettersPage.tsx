@@ -14,6 +14,8 @@ import {
 } from "../features/mailThreads/hooks";
 import type { MailMessage, MailThread, RiskAssessment, RiskLevel } from "../features/mailThreads/types";
 
+const DEFAULT_PERSONA_NAME = "理性破局教练";
+
 function isAnswered(thread: MailThread) {
   return thread.status === "waiting_user" || thread.status === "completed";
 }
@@ -46,12 +48,6 @@ function formatRelativeTime(value: string) {
   return `${Math.floor(hours / 24)}天前`;
 }
 
-function getPersonaForPreference(preference: string) {
-  if (preference === "理性分析") return "理性破局教练";
-  if (preference === "启发引导") return "启发故事导师";
-  return "温暖倾听者";
-}
-
 function buildCounselorAssistPrompt(thread: MailThread) {
   const orderedMessages = [...thread.messages].sort(
     (first, second) =>
@@ -68,7 +64,7 @@ function buildCounselorAssistPrompt(thread: MailThread) {
   const riskBlock = risk
     ? `【风险提示】\n等级：${risk.risk_level}\n触发因素：${risk.signals.join("；") || "无"}\n\n`
     : "";
-  return `${memory}${riskBlock}【回应偏好】${thread.response_preference || "温柔陪伴"}\n\n【完整书信往返】\n${transcript}\n\n请为咨询师起草一封可以修改后发送给用户的回信。要求：\n1. 保持书信口吻，温和、具体、不评判。\n2. 不要声称自己是 AI。\n3. 如果存在高风险或危机线索，优先做安全承接，提醒联系现实支持与紧急服务，避免给危险方法或轻率承诺。\n4. 不要替代医疗诊断或治疗。`;
+  return `${memory}${riskBlock}【统一回应策略】理性分析\n\n【完整书信往返】\n${transcript}\n\n请为咨询师起草一封可以修改后发送给用户的回信。要求：\n1. 保持书信口吻，温和、具体、不评判。\n2. 不要声称自己是 AI。\n3. 如果存在高风险或危机线索，优先做安全承接，提醒联系现实支持与紧急服务，避免给危险方法或轻率承诺。\n4. 不要替代医疗诊断或治疗。`;
 }
 
 export function AssignedLettersPage() {
@@ -136,11 +132,11 @@ export function AssignedLettersPage() {
     try {
       const draft = await generateFromPlan({
         user_input: buildCounselorAssistPrompt(selected),
-        persona_name: getPersonaForPreference(selected.response_preference),
+        persona_name: DEFAULT_PERSONA_NAME,
         planner_output: {
           intention: "咨询师人工回信辅助起草",
           risk_assessment: latestUserRisk(selected)?.reasoning ?? "",
-          response_focus: "基于完整书信上下文、风险提示和用户回应偏好，生成一封供咨询师审阅修改后发送的回信。",
+          response_focus: "基于完整书信上下文和风险提示，生成一封供咨询师审阅修改后发送的回信。",
           must_avoid: ["不要声称自己是 AI", "不要替代医疗诊断", "不要提供危险行为方法"],
         },
         source_mode: "api",
@@ -232,7 +228,7 @@ export function AssignedLettersPage() {
                   <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`rounded-[16px] border p-4 text-left transition ${selected?.id === item.id ? "border-amber bg-[#F6F3FF]" : "border-line bg-white/70 hover:bg-white"}`}>
                     <div className="flex justify-between gap-3"><strong className="text-sm text-ink">任务 {taskNumbers.get(item.id) ?? 1}</strong><span className="text-xs text-ink/48">{item.status === "completed" ? "已完成" : answered ? "等待用户" : "待回复"}</span></div>
                     <p className="mt-2 line-clamp-2 text-sm leading-6 text-ink/68">{latest?.content || item.title}</p>
-                    <p className="mt-2 text-xs text-amber">希望：{item.response_preference || "未指定"} · {formatRelativeTime(item.updated_at)}</p>
+                    <p className="mt-2 text-xs text-amber">{formatRelativeTime(item.updated_at)}</p>
                     <RiskChip level={risk} />
                   </button>
                 );
@@ -246,7 +242,6 @@ export function AssignedLettersPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div><p className="text-sm text-amber">用户署名：{selected.signature}</p><h2 className="mt-2 font-serif text-3xl text-ink">书信任务 {taskNumbers.get(selected.id) ?? 1}</h2></div>
                   <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-paper px-3 py-1 text-sm text-ink/64">回应偏好：{selected.response_preference || "未指定"}</span>
                     <button
                       type="button"
                       onClick={() => openThreadInWorkspace(selected)}
@@ -267,7 +262,7 @@ export function AssignedLettersPage() {
                 <RiskReviewPanel assessment={latestUserRisk(selected)} level={threadRiskLevel(selected)} />
                 <ThreadMessages messages={selected.messages} />
                 <label className="mt-6 block text-sm font-semibold text-ink">写下一封回信
-                  <textarea value={replyText} onChange={(event) => setReplyText(event.target.value)} placeholder={`请尽量按照“${selected.response_preference || "温柔陪伴"}”的方式回应，并参考上方完整往返记录...`} className="mt-3 min-h-[260px] w-full rounded-[16px] border border-line bg-white/78 px-5 py-5 text-[15px] leading-8 outline-none focus:border-amber" />
+                  <textarea value={replyText} onChange={(event) => setReplyText(event.target.value)} placeholder="请参考上方完整往返记录，写下一封可以送达用户的回信..." className="mt-3 min-h-[260px] w-full rounded-[16px] border border-line bg-white/78 px-5 py-5 text-[15px] leading-8 outline-none focus:border-amber" />
                 </label>
                 <AssistSafetyNotice review={assistDraft?.safety_review} />
                 <div className="mt-5 flex items-center justify-between gap-4">

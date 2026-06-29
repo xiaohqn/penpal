@@ -87,7 +87,7 @@ class MailThreadCreateRequest(BaseModel):
     signature: str = "匿名"
     content: str = Field(min_length=1)
     reply_mode: str = "ai"
-    response_preference: str = "温柔陪伴"
+    response_preference: str = "理性分析"
     ai_reply_text: str = ""
 
     @field_validator("signature", "reply_mode", "response_preference", "ai_reply_text")

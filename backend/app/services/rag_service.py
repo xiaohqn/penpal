@@ -65,6 +65,17 @@ class RagService:
         self.seed_path = Path(seed_path).expanduser() if seed_path else None
         self.seed_enabled = seed_enabled
         self._seed_samples: list[RetrievedSample] | None = None
+        self._seed_mtime_ns: int | None = None
+
+    def seed_status(self) -> dict[str, Any]:
+        exists = bool(self.seed_path and self.seed_path.exists())
+        return {
+            "enabled": self.seed_enabled,
+            "path": str(self.seed_path) if self.seed_path else "",
+            "exists": exists,
+            "loaded_count": len(self._load_seed_samples()) if exists and self.seed_enabled else 0,
+            "mtime_ns": self._seed_mtime_ns,
+        }
 
     def build_planner_labels(self, planner_output: dict[str, Any]) -> dict[str, Any]:
         labels = {field: planner_output.get(field, "") for field in LABEL_FIELDS if planner_output.get(field)}
@@ -201,18 +212,24 @@ class RagService:
         return scored
 
     def _load_seed_samples(self) -> list[RetrievedSample]:
-        if self._seed_samples is not None:
+        current_mtime_ns: int | None = None
+        if self.seed_enabled and self.seed_path is not None and self.seed_path.exists():
+            current_mtime_ns = self.seed_path.stat().st_mtime_ns
+        if self._seed_samples is not None and self._seed_mtime_ns == current_mtime_ns:
             return self._seed_samples
         if not self.seed_enabled or self.seed_path is None or not self.seed_path.exists():
             self._seed_samples = []
+            self._seed_mtime_ns = current_mtime_ns
             return self._seed_samples
         try:
             raw = json.loads(self.seed_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             self._seed_samples = []
+            self._seed_mtime_ns = current_mtime_ns
             return self._seed_samples
         if not isinstance(raw, list):
             self._seed_samples = []
+            self._seed_mtime_ns = current_mtime_ns
             return self._seed_samples
 
         samples: list[RetrievedSample] = []
@@ -241,6 +258,7 @@ class RagService:
                 )
             )
         self._seed_samples = samples
+        self._seed_mtime_ns = current_mtime_ns
         return self._seed_samples
 
     def _score(

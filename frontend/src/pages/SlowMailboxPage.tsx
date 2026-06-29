@@ -20,13 +20,21 @@ type MailboxView = "inbox" | "compose" | "journey" | "detail";
 type ReplyMode = "ai" | "human";
 type InboxTab = "all" | "ai" | "human";
 
-const RESPONSE_PREFERENCES: ResponsePreference[] = ["温柔陪伴", "理性分析", "启发引导"];
+const DEFAULT_RESPONSE_PREFERENCE: ResponsePreference = "理性分析";
 type ReplyViewState = "arrived" | "opening" | "unfolding" | "typing" | "done";
 type PublicRuntimeConfig = {
   counselor_features_enabled: boolean;
 };
 
 const JOURNEY: Exclude<MailStatus, "writing">[] = ["folding", "sending", "reading", "replying", "received"];
+const MAIL_JOURNEY_TIMING = {
+  folding: 1300,
+  humanSending: 2200,
+  humanReading: 1600,
+  aiSending: 2600,
+  aiReading: 1900,
+  aiReplyingMinimum: 2600,
+};
 
 const STATUS_COPY: Record<Exclude<MailStatus, "writing">, { title: string; body: string }> = {
   folding: {
@@ -153,7 +161,6 @@ export function SlowMailboxPage() {
   const [tab, setTab] = useState<InboxTab>("all");
   const [status, setStatus] = useState<MailStatus>("writing");
   const [replyMode, setReplyMode] = useState<ReplyMode>("ai");
-  const [responsePreference, setResponsePreference] = useState<ResponsePreference>("温柔陪伴");
   const [letter, setLetter] = useState("");
   const [signature, setSignature] = useState(user?.displayName === "来访用户" ? "匿名" : user?.displayName ?? "匿名");
   const [reply, setReply] = useState("");
@@ -205,12 +212,31 @@ export function SlowMailboxPage() {
     }
   }, [counselorFeaturesEnabled, replyMode, tab]);
 
+  useEffect(() => {
+    if (!selectedThread || selectedThread.status !== "waiting_ai") {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void threadsQuery.refetch().then((result) => {
+        const updated = result.data?.items.find((item) => item.id === selectedThread.id);
+        if (updated) {
+          setSelectedThread(updated);
+          if (updated.status !== "waiting_ai") {
+            setStatus("received");
+          }
+        }
+      });
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [selectedThread, threadsQuery]);
+
   function goInbox() {
     setView("inbox");
     setStatus("writing");
     setSelectedThread(null);
     setContinuingThread(null);
     setError("");
+    void threadsQuery.refetch();
   }
 
   function startCompose() {
@@ -237,7 +263,6 @@ export function SlowMailboxPage() {
     setContinuingThread(item);
     setSelectedThread(null);
     setReplyMode(item.reply_mode);
-    setResponsePreference(item.response_preference);
     setSignature(item.signature);
     setLetter("");
     setReply("");
@@ -262,26 +287,24 @@ export function SlowMailboxPage() {
 
     if (replyMode === "human" || shouldForceHuman) {
       try {
-        if (shouldForceHuman) {
-          setResponsePreference((current) => current || "温柔陪伴");
-        }
-        setStatus("folding");
-        await wait(900);
-        setStatus("sending");
-        await wait(1300);
-        setStatus("reading");
-        await wait(900);
-        const saved = continuingThread
-          ? await addThreadMessage.mutateAsync({
+        const saveLetter = continuingThread
+          ? addThreadMessage.mutateAsync({
               threadId: continuingThread.id,
               payload: { content: letter.trim() },
             })
-          : await createThread.mutateAsync({
+          : createThread.mutateAsync({
               signature: signature.trim() || "匿名",
               content: letter.trim(),
               reply_mode: "human",
-              response_preference: responsePreference,
-            });
+              response_preference: DEFAULT_RESPONSE_PREFERENCE,
+        });
+        setStatus("folding");
+        await wait(MAIL_JOURNEY_TIMING.folding);
+        setStatus("sending");
+        await wait(MAIL_JOURNEY_TIMING.humanSending);
+        setStatus("reading");
+        await wait(MAIL_JOURNEY_TIMING.humanReading);
+        const saved = await saveLetter;
         setSelectedThread(saved);
         setContinuingThread(null);
         setView("detail");
@@ -293,31 +316,30 @@ export function SlowMailboxPage() {
     }
 
     try {
+      const saveLetter = continuingThread
+        ? addThreadMessage.mutateAsync({
+            threadId: continuingThread.id,
+            payload: { content: letter.trim() },
+          })
+        : createThread.mutateAsync({
+            signature: signature.trim() || "匿名",
+            content: letter.trim(),
+            reply_mode: "ai",
+            response_preference: DEFAULT_RESPONSE_PREFERENCE,
+      });
       setStatus("folding");
-      await wait(900);
+      await wait(MAIL_JOURNEY_TIMING.folding);
       setStatus("sending");
-      await wait(1700);
+      await wait(MAIL_JOURNEY_TIMING.aiSending);
       setStatus("reading");
-      await wait(1200);
+      await wait(MAIL_JOURNEY_TIMING.aiReading);
       setStatus("replying");
-      const [saved] = await Promise.all([
-        continuingThread
-          ? addThreadMessage.mutateAsync({
-              threadId: continuingThread.id,
-              payload: { content: letter.trim() },
-            })
-          : createThread.mutateAsync({
-              signature: signature.trim() || "匿名",
-              content: letter.trim(),
-              reply_mode: "ai",
-              response_preference: responsePreference,
-            }),
-        wait(1600),
-      ]);
+      const [saved] = await Promise.all([saveLetter, wait(MAIL_JOURNEY_TIMING.aiReplyingMinimum)]);
       setReply(getLatestReplyMessage(saved)?.content ?? "");
       setSelectedThread(saved);
       setContinuingThread(null);
-      setStatus("received");
+      setStatus(saved.status === "waiting_ai" ? "replying" : "received");
+      setView("detail");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "回信暂时没有送达，请稍后再试。");
       setView("compose");
@@ -355,8 +377,6 @@ export function SlowMailboxPage() {
             replyMode={replyMode}
             onReplyModeChange={setReplyMode}
             counselorFeaturesEnabled={counselorFeaturesEnabled}
-            responsePreference={responsePreference}
-            onResponsePreferenceChange={setResponsePreference}
             letter={letter}
             onLetterChange={setLetter}
             signature={signature}
@@ -626,8 +646,6 @@ function ComposeView({
   replyMode,
   onReplyModeChange,
   counselorFeaturesEnabled,
-  responsePreference,
-  onResponsePreferenceChange,
   letter,
   onLetterChange,
   signature,
@@ -639,8 +657,6 @@ function ComposeView({
   replyMode: ReplyMode;
   onReplyModeChange: (mode: ReplyMode) => void;
   counselorFeaturesEnabled: boolean;
-  responsePreference: ResponsePreference;
-  onResponsePreferenceChange: (preference: ResponsePreference) => void;
   letter: string;
   onLetterChange: (value: string) => void;
   signature: string;
@@ -668,31 +684,6 @@ function ComposeView({
           onClick={() => onReplyModeChange("human")}
         />
       </div>
-
-      <section className="rounded-[20px] border border-line bg-white/76 p-5 shadow-card">
-          <h3 className="font-serif text-2xl text-ink">你更希望这封信被怎样回应？</h3>
-          <p className="mt-2 text-sm text-ink/60">
-            {replyMode === "ai"
-              ? "AI会按这个回应方式生成一封完整回信。"
-              : "这个偏好会和来信一起交给系统随机分配的咨询师。"}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {RESPONSE_PREFERENCES.map((preference) => (
-              <button
-                key={preference}
-                type="button"
-                onClick={() => onResponsePreferenceChange(preference)}
-                className={`rounded-[16px] border px-4 py-3 text-sm transition ${
-                  responsePreference === preference
-                    ? "border-amber bg-[#F6F3FF] font-medium text-ink shadow-card"
-                    : "border-line bg-white/70 text-ink/68 hover:bg-white"
-                }`}
-              >
-                {preference}
-              </button>
-            ))}
-          </div>
-        </section>
 
       <div className="letter-paper rounded-[20px] border border-line bg-white/84 p-6 shadow-card md:p-8">
         <p className="text-sm uppercase tracking-[0.2em] text-amber">Dear Mindful Penpal</p>
@@ -813,14 +804,13 @@ function DetailView({
 
       {item.reply_mode === "human" ? (
         <section className="mt-4 rounded-[16px] border border-line bg-white/72 p-5 text-sm text-ink/68">
-          <p>希望被回应的方式：<strong className="text-ink">{item.response_preference || "未指定"}</strong></p>
-          <p className="mt-2">已分配咨询师：<strong className="text-ink">{item.assigned_counselor_id || "正在分配"}</strong></p>
+          <p>已分配咨询师：<strong className="text-ink">{item.assigned_counselor_id || "正在分配"}</strong></p>
         </section>
       ) : null}
 
       <div className="my-6 border-t border-line" />
 
-      <ThreadTimeline messages={item.messages} waiting={status === "waiting_human"} />
+      <ThreadTimeline messages={item.messages} waitingMode={status === "waiting_ai" ? "ai" : status === "waiting_human" ? "human" : null} />
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button
@@ -899,7 +889,7 @@ function MailTimeline({ status }: { status: string }) {
     { key: "writing", label: "撰写中" },
     { key: "replied", label: "已回复" },
   ];
-  const activeCount = status === "waiting_human" ? 1 : 4;
+  const activeCount = status === "waiting_human" ? 1 : status === "waiting_ai" ? 3 : 4;
   return (
     <div className="grid grid-cols-4 gap-2">
       {steps.map((step, index) => (
@@ -907,7 +897,7 @@ function MailTimeline({ status }: { status: string }) {
           <div
             className={`flex h-8 w-8 items-center justify-center rounded-full text-xs ${
               index < activeCount ? "lilac-gradient text-white" : "bg-paper text-ink/42"
-            } ${status === "waiting_human" && index === 1 ? "pulse-soft" : ""}`}
+            } ${((status === "waiting_human" && index === 1) || (status === "waiting_ai" && index === 2)) ? "pulse-soft" : ""}`}
           >
             ●
           </div>
@@ -920,10 +910,10 @@ function MailTimeline({ status }: { status: string }) {
 
 function ThreadTimeline({
   messages,
-  waiting,
+  waitingMode,
 }: {
   messages: MailMessage[];
-  waiting: boolean;
+  waitingMode: "ai" | "human" | null;
 }) {
   const orderedMessages = [...messages].sort(
     (first, second) =>
@@ -961,12 +951,16 @@ function ThreadTimeline({
           </section>
         );
       })}
-      {waiting ? (
+      {waitingMode ? (
         <section className="rounded-[16px] border border-line bg-white/72 p-6 text-center">
           <Clock3 size={22} className="mx-auto text-[#F59E0B]" />
-          <h3 className="mt-3 font-serif text-2xl text-ink">正在等待回复</h3>
+          <h3 className="mt-3 font-serif text-2xl text-ink">
+            {waitingMode === "ai" ? "正在写回信" : "正在等待回复"}
+          </h3>
           <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-ink/62">
-            你的信已经被认真接收，对方正在阅读这一整段往返记录。
+            {waitingMode === "ai"
+              ? "你的信已经投递成功，心灵笔友正在慢慢写回信。你可以先返回信箱，稍后再回来打开。"
+              : "你的信已经被认真接收，对方正在阅读这一整段往返记录。"}
           </p>
         </section>
       ) : null}

@@ -1,4 +1,5 @@
-import { AlertTriangle, History, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight, History, Sparkles } from "lucide-react";
 
 import type { MailThreadWorkspaceContext } from "../features/records/types";
 
@@ -24,6 +25,9 @@ function uniqueRiskLines(signals?: string[], reasoning?: string) {
 }
 
 export function MailThreadContextPanel({ context }: Props) {
+  const [expanded, setExpanded] = useState(true);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+
   if (!isMailThreadContext(context)) return null;
   const risk = context.risk ?? {};
   const hasRisk = risk.level && risk.level !== "NONE";
@@ -39,20 +43,30 @@ export function MailThreadContextPanel({ context }: Props) {
           </div>
           <h2 className="mt-3 font-serif text-2xl text-ink">辅助上下文</h2>
         </div>
-        <span className="rounded-full bg-paper px-3 py-1 text-xs text-ink/58">
-          不属于用户原文
-        </span>
+        <div className="flex flex-wrap justify-end gap-2">
+          <span className="rounded-full bg-paper px-3 py-1 text-xs text-ink/58">
+            不属于用户原文
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="inline-flex items-center gap-1 rounded-full border border-line bg-white/72 px-3 py-1 text-xs text-ink/64 transition hover:bg-white"
+          >
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {expanded ? "收起" : "展开"}
+          </button>
+        </div>
       </div>
 
-      <div className="mt-5 grid gap-4">
+      {expanded ? <div className="mt-5 grid gap-4">
         <div className="rounded-[18px] border border-line bg-[#F8F6FF] p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Sparkles size={16} className="text-amber" />
-            回应设置
+            用户信息
           </p>
           <div className="mt-3 grid gap-2 text-sm leading-7 text-ink/68">
             <p>用户署名：{context.signature || "匿名"}</p>
-            <p>回应偏好：{context.response_preference || "温柔陪伴"}</p>
+            <p>生成策略：理性分析</p>
           </div>
         </div>
 
@@ -72,11 +86,21 @@ export function MailThreadContextPanel({ context }: Props) {
 
         {transcript.length > 0 ? (
           <div className="rounded-[18px] border border-line bg-white/72 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <History size={16} className="text-amber" />
-              完整书信往返
-            </p>
-            <div className="mt-3 grid gap-3">
+            <button
+              type="button"
+              onClick={() => setTranscriptExpanded((value) => !value)}
+              className="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold text-ink"
+            >
+              <span className="flex items-center gap-2">
+                <History size={16} className="text-amber" />
+                完整书信往返
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-paper px-3 py-1 text-xs font-normal text-ink/58">
+                共 {transcript.length} 条
+                {transcriptExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            </button>
+            {transcriptExpanded ? <div className="mt-3 grid gap-3">
               {transcript.map((message, index) => (
                 <div key={message.id ?? index} className="rounded-[14px] bg-paper/70 px-4 py-3">
                   <p className="text-xs font-semibold text-amber">{message.label || "书信"}</p>
@@ -85,10 +109,10 @@ export function MailThreadContextPanel({ context }: Props) {
                   </p>
                 </div>
               ))}
-            </div>
+            </div> : null}
           </div>
         ) : null}
-      </div>
+      </div> : null}
     </section>
   );
 }

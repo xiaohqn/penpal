@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from app.adapters.llm_client import LLMClient
 from app.adapters.planner_actor_adapter import build_style_summary, normalize_persona_name
@@ -53,7 +54,7 @@ class GeneratorService:
                 planner_output=planner_output,
                 style_summary=style_summary,
             )
-            return {"raw": "", "response": response}
+            return {"raw": "", "response": self._normalize_letter_format(response)}
 
         if mode == "local":
             local_model_path = self.settings.resolve_local_generator_model_path()
@@ -74,6 +75,7 @@ class GeneratorService:
                 model=self.settings.vllm_model_name,
                 messages=generator_messages,
                 temperature=0.55,
+                timeout=self.settings.generator_timeout_seconds,
             )
         else:
             raw = await self.llm_client.complete_api(
@@ -81,9 +83,10 @@ class GeneratorService:
                 model=self.settings.generator_model,
                 messages=generator_messages,
                 temperature=0.55,
+                timeout=self.settings.generator_timeout_seconds,
             )
         response, _ = parse_response_only(raw)
-        return {"raw": raw, "response": response}
+        return {"raw": raw, "response": self._normalize_letter_format(response)}
 
     def split_text(self, text: str) -> list[str]:
         chunk_size = max(1, self.settings.stream_chunk_size)
@@ -94,6 +97,30 @@ class GeneratorService:
             yield chunk
             if self.settings.stream_chunk_delay_ms > 0:
                 await asyncio.sleep(self.settings.stream_chunk_delay_ms / 1000)
+
+    def _normalize_letter_format(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            return cleaned
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        paragraphs = [paragraph.strip() for paragraph in cleaned.split("\n\n") if paragraph.strip()]
+        if len(paragraphs) >= 4:
+            return "\n\n".join(paragraphs)
+
+        sentences = [item.strip() for item in re.split(r"(?<=[。！？!?])\s*", cleaned) if item.strip()]
+        if len(sentences) < 6:
+            return cleaned
+
+        grouped: list[str] = []
+        current: list[str] = []
+        for sentence in sentences:
+            current.append(sentence)
+            if len(current) >= 2:
+                grouped.append("".join(current))
+                current = []
+        if current:
+            grouped.append("".join(current))
+        return "\n\n".join(grouped)
 
     def _mock_response(
         self,
@@ -110,7 +137,7 @@ class GeneratorService:
         }
         action_line = {
             "概念启发": "这两天先别逼自己一下子想通所有事，只需要把最重的那件事写成两三句，给它一个名字。",
-            "框架策略": "你可以先做三件小事：找一个可信任的人开口；把最近最压你的情境写下来；给自己留出一个不被打断的短时间缓冲。",
+            "结构引导": "也许可以先从一个很小的动作开始：找一个可信任的人开口，把最近最压你的情境写成两三句，再给自己留出一小段不被打断的缓冲时间。",
             "微步实操": "今晚先做一个最小动作：把想说却说不出口的话写进备忘录；明天再把其中一句发给一个值得信任的大人或老师。",
         }
 

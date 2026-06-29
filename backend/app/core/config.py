@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     planner_model: str = "gpt-4o-mini"
     generator_model: str = "doubao-1-5-pro-32k-250115"
+    planner_timeout_seconds: int = 90
+    generator_timeout_seconds: int = 180
     planner_mode: Literal["auto", "mock", "api"] = "auto"
     generator_mode: Literal["auto", "mock", "api", "local", "vllm"] = "auto"
     compare_model_outputs: bool = False

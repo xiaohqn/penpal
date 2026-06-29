@@ -131,7 +131,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
           )}
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
-          <p className="mb-3 text-xs uppercase tracking-[0.18em] text-amber">行动策略</p>
+          <p className="mb-3 text-xs uppercase tracking-[0.18em] text-amber">下一步</p>
           <ul className="grid gap-2">
             {(plannerOutput.action_strategy ?? []).map((item) => (
               <li key={item} className="rounded-2xl bg-white/68 px-3 py-2">
@@ -185,7 +185,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <p className="text-xs uppercase tracking-[0.18em] text-amber">RAG 参考样本</p>
               <p className="text-xs text-ink/50">
-                {ragReferences.length > 0 ? `已检索 ${ragReferences.length} 条，点击展开查看` : "暂无命中"}
+                {ragReferences.length > 0 ? `已引用 ${ragReferences.length} 条，点击展开查看` : "本次未引用样本"}
               </p>
             </div>
           </summary>
@@ -249,7 +249,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
               </div>
             ) : (
               <p className="rounded-2xl bg-white/68 px-3 py-2 text-ink/62">
-                当前没有可用参考样本。保存专家满意稿后，或确认 seed 路径可读后，这里会显示命中的 few-shot。
+                系统会在历史满意稿或种子库中找到相似内容时自动引用参考样本；本次没有足够相似的样本，因此未附加 few-shot。
               </p>
             )}
           </div>

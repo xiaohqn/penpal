@@ -1,14 +1,11 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { Inbox, LogOut, ScrollText, Sparkles } from "lucide-react";
+import { LogOut, ScrollText, Sparkles } from "lucide-react";
 
 import { useAuth } from "../app/auth";
 import { BatchExcelPanel } from "../components/BatchExcelPanel";
 import { DraftStreamTabs } from "../components/DraftStreamTabs";
-import { ExpertAnnotationPanel } from "../components/ExpertAnnotationPanel";
-import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { MailThreadContextPanel } from "../components/MailThreadContextPanel";
-import { PersonaSelector } from "../components/PersonaSelector";
 import { PlannerInsightAccordion } from "../components/PlannerInsightAccordion";
 import { PolishingEditor } from "../components/PolishingEditor";
 import {
@@ -18,7 +15,6 @@ import {
 } from "../components/ResponseEvaluationPanel";
 import { ResponseVersionPanel } from "../components/ResponseVersionPanel";
 import { SaveRecordBar } from "../components/SaveRecordBar";
-import { ToneGuideBar } from "../components/ToneGuideBar";
 import { UserLetterPanel } from "../components/UserLetterPanel";
 import scirScLogo from "../assets/logo-mark.png";
 import { useGenerationWorkspace, usePersonas } from "../features/generation/hooks";
@@ -47,6 +43,15 @@ import type {
 
 type WorkspaceMode = "single" | "excel_batch" | "mail_batch";
 type WorkspaceBatchItem = ReturnType<typeof mapBatchSessionItem>;
+const DEFAULT_PERSONA_NAME = "理性破局教练";
+const PERSONA_DISPLAY_NAMES: Record<string, string> = {
+  "标准书信回复": "标准书信回复",
+  "理性破局教练": "理性分析助手",
+};
+
+function getPersonaDisplayName(personaName: string) {
+  return PERSONA_DISPLAY_NAMES[personaName] ?? personaName;
+}
 
 const DEFAULT_INPUT = `这段时间我过得特别难受。每天早上想到要去学校，心里就沉甸甸的，很害怕。我不是不想学习，但上课时总控制不住地分心，总担心同学在背后议论我。放学我也尽量绕路，躲开那几个经常堵我的同学。
 
@@ -130,13 +135,13 @@ function buildGenerationInput(userInput: string, context: unknown) {
     "",
     memory.trim(),
     riskBlock.trim(),
-    `【用户回应偏好】${context.response_preference || "温柔陪伴"}`,
+    "【统一回应策略】理性分析",
     `【用户署名】${context.signature || "匿名"}`,
     "",
     transcript ? `【完整书信往返】\n${transcript}` : "",
     "",
     context.instruction ||
-      "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文、风险提示和用户偏好；不要声称自己是 AI；不要替代医疗诊断或治疗。",
+      "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文和风险提示；不要声称自己是 AI；不要替代医疗诊断或治疗。",
   ]
     .filter((part) => part.trim())
     .join("\n\n");
@@ -148,7 +153,9 @@ function splitLegacyMailThreadInput(value: string) {
   }
   const userMatch = value.match(/用户来信：\n([\s\S]*?)(?:\n\n请为咨询师生成|\n\n既往回信：|$)/);
   const memoryMatch = value.match(/【系统记忆摘要】\n([\s\S]*?)\n\n【风险提示】/);
-  const riskMatch = value.match(/【风险提示】\n等级：([^\n]+)\n触发因素：([\s\S]*?)\n\n【用户回应偏好】/);
+  const riskMatch =
+    value.match(/【风险提示】\n等级：([^\n]+)\n触发因素：([\s\S]*?)\n\n【统一回应策略】/) ??
+    value.match(/【风险提示】\n等级：([^\n]+)\n触发因素：([\s\S]*?)\n\n【用户回应偏好】/);
   const preferenceMatch = value.match(/【用户回应偏好】([^\n]+)/);
   const signatureMatch = value.match(/【用户署名】([^\n]+)/);
   const transcriptMatch = value.match(/【完整书信往返】\n([\s\S]*?)\n\n请为咨询师生成/);
@@ -159,7 +166,7 @@ function splitLegacyMailThreadInput(value: string) {
     context: {
       kind: "mail_thread_reply",
       signature: signatureMatch?.[1]?.trim() || "匿名",
-      response_preference: preferenceMatch?.[1]?.trim() || "温柔陪伴",
+      response_preference: preferenceMatch?.[1]?.trim() || "理性分析",
       memory_summary: memoryMatch?.[1]?.trim() || "",
       risk: {
         level: riskMatch?.[1]?.trim() || "NONE",
@@ -174,7 +181,7 @@ function splitLegacyMailThreadInput(value: string) {
           ]
         : [],
       instruction:
-        "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文、风险提示和用户偏好；不要声称自己是 AI；不要替代医疗诊断或治疗。",
+        "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文和风险提示；不要声称自己是 AI；不要替代医疗诊断或治疗。",
     },
   };
 }
@@ -187,7 +194,7 @@ export function WorkspacePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { data, isLoading } = usePersonas();
+  const { data } = usePersonas();
   const batchSessions = useBatchSessions();
   const {
     drafts,
@@ -210,7 +217,11 @@ export function WorkspacePage() {
   const exportReviewedBatch = useExportReviewedBatch();
   const createAssignedThreadsWorkspace = useCreateAssignedThreadsWorkspaceSession();
 
-  const personas = data?.personas ?? [];
+  const personas = useMemo(() => {
+    const catalog = data?.personas ?? [];
+    const defaultPersona = catalog.find((persona) => persona.name === DEFAULT_PERSONA_NAME);
+    return defaultPersona ? [defaultPersona] : catalog.slice(0, 1);
+  }, [data?.personas]);
   const availableSessions = batchSessions.data?.items ?? [];
 
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
@@ -230,8 +241,6 @@ export function WorkspacePage() {
   const [batchFileName, setBatchFileName] = useState<string | null>(null);
   const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("single");
-  const [generationSourceMode, setGenerationSourceMode] = useState<"auto" | "api" | "vllm" | "compare">("compare");
-  const [rightPanelMode, setRightPanelMode] = useState<"batch" | "evaluation">("batch");
   const [sourceAnnotations, setSourceAnnotations] = useState<SourceAnnotation[]>([]);
   const [responseVersions, setResponseVersions] = useState<ResponseVersion[]>([]);
   const [responseEvaluation, setResponseEvaluation] = useState<ResponseEvaluation>(EMPTY_EVALUATION);
@@ -286,9 +295,18 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (!isBatchMode && personas.length > 0 && selectedPersonas.length === 0) {
-      setSelectedPersonas(personas.slice(0, 3).map((item) => item.name));
+      setSelectedPersonas([personas[0].name]);
     }
   }, [isBatchMode, personas, selectedPersonas.length]);
+
+  useEffect(() => {
+    if (!personas[0]?.name) {
+      return;
+    }
+    if (selectedPersonas.length !== 1 || selectedPersonas[0] !== personas[0].name) {
+      setSelectedPersonas([personas[0].name]);
+    }
+  }, [personas, selectedPersonas]);
 
   useEffect(() => {
     if (!sessionDetail?.items?.length) {
@@ -310,7 +328,7 @@ export function WorkspacePage() {
     resetWorkspace();
     const splitInput = splitLegacyMailThreadInput(currentBatchItem.user_input);
     setUserInput(splitInput.userInput);
-    setSelectedPersonas(currentBatchItem.selected_persona_names ?? []);
+    setSelectedPersonas(personas[0]?.name ? [personas[0].name] : currentBatchItem.selected_persona_names ?? []);
     setSourceAnnotations(currentBatchItem.source_annotations_json ?? []);
     setResponseVersions(currentBatchItem.response_versions_json ?? []);
     setActiveVersionIndex(currentBatchItem.active_version_index ?? 0);
@@ -370,15 +388,6 @@ export function WorkspacePage() {
     polishedText,
   ]);
 
-  function togglePersona(personaName: string) {
-    setSelectedPersonas((current) => {
-      if (current.includes(personaName)) {
-        return current.filter((item) => item !== personaName);
-      }
-      return [...current, personaName];
-    });
-  }
-
   function goToBatchIndex(nextIndex: number) {
     if (nextIndex < 0 || nextIndex >= visibleBatchItems.length) {
       return;
@@ -426,14 +435,14 @@ export function WorkspacePage() {
     setStatusText(null);
     setResponseEvaluation(EMPTY_EVALUATION);
     if (selectedPersonas.length === 0) {
-      setStatusText("请先选择至少一种风格，再生成草稿。");
+      setStatusText("默认回信模型尚未加载完成，请稍后再试。");
       return;
     }
     await startGeneration({
       user_input: buildGenerationInput(userInput, currentWorkspaceContext),
       persona_names: selectedPersonas,
-      compare_sources: generationSourceMode === "compare",
-      source_mode: generationSourceMode,
+      compare_sources: false,
+      source_mode: "auto",
     });
   }
 
@@ -576,7 +585,6 @@ export function WorkspacePage() {
 
   function handleSelectExcelBatchMode() {
     setWorkspaceMode("excel_batch");
-    setRightPanelMode("batch");
     const excelSession = availableSessions.find((session) => session.source_file_name !== "assigned-mail-threads" && session.source_file_name !== "assigned-mail-thread");
     if (excelSession) {
       setActiveSessionId(excelSession.id);
@@ -597,12 +605,10 @@ export function WorkspacePage() {
       const result = await createAssignedThreadsWorkspace.mutateAsync();
       setActiveSessionId(result.id);
       setWorkspaceMode("mail_batch");
-      setRightPanelMode("batch");
       setBatchFileName("人工书信任务");
       setStatusText("已载入分配给你的人工书信任务。逐封生成、润色并保存后，会自动送达用户信箱。");
     } catch (error) {
       setWorkspaceMode("mail_batch");
-      setRightPanelMode("batch");
       setStatusText(error instanceof Error ? error.message : "暂时没有可载入的人工书信任务。");
     }
   }
@@ -638,9 +644,9 @@ export function WorkspacePage() {
                 `${index + 1}. 回复片段：${annotation.quote || "未填写"}；专家批注：${annotation.note || "未填写"}`,
             )
             .join("\n")}\n\n【专家总体说明】\n${expertAnnotation}`.trim(),
-          persona_names: selectedPersonas.length > 0 ? selectedPersonas : [activeDraft?.persona_name ?? "温暖倾听者"],
-          compare_sources: generationSourceMode === "compare",
-          source_mode: generationSourceMode,
+          persona_names: selectedPersonas.length > 0 ? selectedPersonas : [activeDraft?.persona_name ?? DEFAULT_PERSONA_NAME],
+          compare_sources: false,
+          source_mode: "auto",
         });
 
         const selectedDraft =
@@ -745,7 +751,7 @@ export function WorkspacePage() {
           user_input: buildGenerationInput(userInput, currentWorkspaceContext),
           persona_name: activeDraft.persona_name,
           planner_output: plannerOutput,
-          source_mode: generationSourceMode,
+          source_mode: "auto",
         });
         appendPlannerRegeneratedVersion(selectedDraft, plannerOutput);
         setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
@@ -851,7 +857,7 @@ export function WorkspacePage() {
         setResponseVersions(updatedItem.response_versions_json ?? []);
         setActiveVersionIndex(updatedItem.active_version_index ?? 0);
         setPolishedText(updatedItem.latest_response ?? polishedText);
-        setSelectedPersonas(updatedItem.selected_persona_names_json ?? selectedPersonas);
+        setSelectedPersonas(personas[0]?.name ? [personas[0].name] : selectedPersonas);
         setSourceAnnotations(updatedItem.source_annotations_json ?? sourceAnnotations);
         setResponseEvaluation(EMPTY_EVALUATION);
         setStatusText(`已回退到版本 ${versionIndex + 1}。`);
@@ -862,43 +868,28 @@ export function WorkspacePage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 md:px-8 xl:px-10">
+    <main className="min-h-screen px-3 py-4 md:px-6 xl:px-8">
       <div className="mx-auto max-w-[1760px]">
-        <header className="surface-glow mb-5 overflow-hidden rounded-[26px] border border-white/70 bg-white/84 px-5 py-4 shadow-soft backdrop-blur">
-          <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
-              <img src={scirScLogo} alt="心灵笔友标志" className="h-20 w-28 shrink-0 object-contain mix-blend-multiply md:h-24 md:w-32" />
+        <header className="surface-glow mb-4 overflow-hidden rounded-[22px] border border-white/70 bg-white/84 px-4 py-3 shadow-soft backdrop-blur">
+          <div className="relative flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <img src={scirScLogo} alt="心灵笔友标志" className="h-14 w-20 shrink-0 object-contain mix-blend-multiply" />
               <div className="min-w-0">
-                <h1 className="font-serif text-3xl text-ink md:text-4xl">
+                <h1 className="font-serif text-2xl text-ink md:text-3xl">
                   <span className="lilac-text">心灵笔友</span>
                 </h1>
-                <p className="mt-1 text-sm leading-6 text-ink/64">面向心理专家的 AI 协同工作台</p>
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[540px]">
-              <div className="rounded-[20px] border border-line bg-paper/78 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">咨询师 ID</p>
-                <p className="mt-1 truncate text-base font-semibold text-ink">{user?.counselorId ?? "default"}</p>
-              </div>
-              <div className="rounded-[20px] border border-line bg-paper/78 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">已选风格</p>
-                <p className="mt-1 text-base font-semibold text-ink">{selectedPersonas.length} 个</p>
-              </div>
-              <div className="rounded-[20px] border border-line bg-paper/78 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">批量进度</p>
-                <p className="mt-1 text-base font-semibold text-ink">
-                  {isWorkspaceBatchMode && hasVisibleBatch ? `${batchCompletedCount} / ${visibleBatchItems.length}` : "未启用"}
+                <p className="mt-0.5 text-sm leading-6 text-ink/64">
+                  咨询师 {user?.counselorId ?? "default"}
+                  {isWorkspaceBatchMode && hasVisibleBatch ? ` · 批量 ${batchCompletedCount}/${visibleBatchItems.length}` : ""}
                 </p>
               </div>
             </div>
-          </div>
-          <div className="relative mt-4 flex flex-col gap-3 border-t border-line/70 pt-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <div className="inline-flex rounded-full border border-line bg-white/72 p-1">
                 <button
                   type="button"
                   onClick={() => setWorkspaceMode("single")}
-                  className={`rounded-full px-4 py-2 text-sm transition ${
+                  className={`rounded-full px-3 py-1.5 text-sm transition ${
                     workspaceMode === "single" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
                   }`}
                 >
@@ -907,7 +898,7 @@ export function WorkspacePage() {
                 <button
                   type="button"
                   onClick={handleSelectExcelBatchMode}
-                  className={`rounded-full px-4 py-2 text-sm transition ${
+                  className={`rounded-full px-3 py-1.5 text-sm transition ${
                     workspaceMode === "excel_batch" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
                   }`}
                 >
@@ -917,46 +908,25 @@ export function WorkspacePage() {
                   type="button"
                   onClick={handleLoadAssignedMailBatch}
                   disabled={createAssignedThreadsWorkspace.isPending}
-                  className={`rounded-full px-4 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                  className={`rounded-full px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${
                     workspaceMode === "mail_batch" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
                   }`}
                 >
                   {createAssignedThreadsWorkspace.isPending ? "载入中..." : "人工书信"}
                 </button>
               </div>
-              <div className="inline-flex rounded-full border border-line bg-white/72 p-1">
-                {[
-                  { value: "auto", label: "自动" },
-                  { value: "api", label: "API" },
-                  { value: "vllm", label: "vLLM" },
-                  { value: "compare", label: "对比" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() =>
-                      setGenerationSourceMode(option.value as "auto" | "api" | "vllm" | "compare")
-                    }
-                    className={`rounded-full px-4 py-2 text-sm transition ${
-                      generationSourceMode === option.value ? "lilac-gradient text-white shadow-card" : "text-ink/72"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
               <button
                 type="button"
                 onClick={handleGenerate}
                 disabled={jobLoading || selectedPersonas.length === 0 || !userInput.trim()}
-                className="lilac-gradient inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+                className="lilac-gradient inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-white shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Sparkles size={16} />
-                {jobLoading ? "生成中..." : "生成多种草稿"}
+                {jobLoading ? "生成中..." : "生成回信草稿"}
               </button>
               <Link
                 to="/records"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-5 py-3 text-sm text-ink transition hover:bg-paper/85"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-4 py-2 text-sm text-ink transition hover:bg-paper/85"
               >
                 <ScrollText size={16} />
                 查看历史记录
@@ -967,66 +937,68 @@ export function WorkspacePage() {
                   logout();
                   navigate("/login", { replace: true });
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-5 py-3 text-sm text-ink transition hover:bg-paper/85"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-4 py-2 text-sm text-ink transition hover:bg-paper/85"
               >
                 <LogOut size={16} />
                 退出登录
               </button>
             </div>
-            <div className="rounded-full bg-white/72 px-4 py-2 text-sm text-ink/72">
-              {isWorkspaceBatchMode && hasVisibleBatch
-                ? isMailBatchMode
-                  ? "人工书信按批量任务处理，保存完成后自动送达用户信箱"
-                  : "支持刷新后恢复批次、原文高亮批注、基于批注重生成和版本回退"
-                : generationSourceMode === "compare"
-                  ? "当前会同时对比 API 与本地 vLLM 回复"
-                  : generationSourceMode === "api"
-                    ? "当前只生成 API 模型回复"
-                    : generationSourceMode === "vllm"
-                      ? "当前只生成本地 vLLM 回复"
-                      : "建议一次比较 2 至 3 种风格"}
-            </div>
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[440px_minmax(0,1fr)_360px] 2xl:grid-cols-[480px_minmax(0,1fr)_380px]">
-          <div className="grid gap-6">
-            <UserLetterPanel
-              value={userInput}
-              onChange={setUserInput}
-              readOnly={Boolean(currentBatchItem)}
-              batchMeta={
-                currentBatchItem
-                  ? {
-                      current: batchCurrentIndex + 1,
-                      total: visibleBatchItems.length,
-                      rowNumber: currentBatchItem.row_number,
-                    }
-                  : null
-              }
-            />
-            <MailThreadContextPanel context={currentWorkspaceContext} />
-          </div>
+        <UserLetterPanel
+          value={userInput}
+          onChange={setUserInput}
+          readOnly={Boolean(currentBatchItem)}
+          compact
+          batchMeta={
+            currentBatchItem
+              ? {
+                  current: batchCurrentIndex + 1,
+                  total: visibleBatchItems.length,
+                  rowNumber: currentBatchItem.row_number,
+                }
+              : null
+          }
+        />
 
-          <div className="grid gap-6">
-            {isLoading ? (
-              <LoadingSkeleton />
-            ) : (
-              <PersonaSelector
-                personas={personas}
-                selected={selectedPersonas}
-                onToggle={togglePersona}
-              />
-            )}
-
-            {jobError ? <p className="text-sm text-red-600">{jobError}</p> : null}
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="grid gap-4">
             {statusText ? (
-              <div className="rounded-[24px] border border-line bg-white/72 px-5 py-4 text-sm leading-7 text-moss shadow-card">
+              <div className="rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm leading-7 text-moss shadow-card">
                 {statusText}
               </div>
             ) : null}
+            {jobError ? <p className="text-sm text-red-600">{jobError}</p> : null}
 
-            <DraftStreamTabs drafts={drafts} selectedPersona={selectedPersona} onSelect={setSelectedPersona} />
+            <DraftStreamTabs
+              drafts={drafts}
+              selectedPersona={selectedPersona}
+              onSelect={setSelectedPersona}
+              displayName={getPersonaDisplayName}
+            />
+
+            <section className="grid gap-4 rounded-[22px] border border-line bg-white/76 p-4 shadow-soft md:p-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <h2 className="font-serif text-2xl text-ink">
+                  {getPersonaDisplayName(activeDraft?.persona_name ?? currentBatchItem?.selected_persona_name ?? DEFAULT_PERSONA_NAME)}
+                </h2>
+                <div className="rounded-full border border-line bg-paper/75 px-3 py-1.5 text-sm text-ink/72">
+                  生成草稿 → 润色回信 → 保存
+                </div>
+              </div>
+              <PolishingEditor
+                value={polishedText}
+                onChange={setPolishedText}
+                annotations={sourceAnnotations}
+                onAddAnnotation={handleAddSourceAnnotation}
+                onRemoveAnnotation={handleRemoveSourceAnnotation}
+              />
+            </section>
+          </div>
+
+          <aside className="grid gap-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
+            <MailThreadContextPanel context={currentWorkspaceContext} />
 
             <PlannerInsightAccordion
               plannerOutput={activeDraft?.planner_output}
@@ -1035,87 +1007,32 @@ export function WorkspacePage() {
               regenerating={jobLoading || regenerateBatchSessionItem.isPending}
             />
 
-            <section className="grid gap-5 rounded-panel border border-line bg-white/76 p-6 shadow-soft">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.22em] text-moss">Step 3 & 4</p>
-                  <h2 className="mt-2 font-serif text-3xl text-ink">
-                    {activeDraft?.persona_name ?? currentBatchItem?.selected_persona_name ?? "先选择一份草稿"}
-                  </h2>
-                  <p className="mt-2 text-sm leading-7 text-ink/66">
-                    先对选中的草稿做最终润色，再记录本次人工判断与修改原因，方便后续复盘和高质量数据沉淀。
-                  </p>
-                </div>
-                <div className="rounded-[24px] border border-line bg-paper/75 px-4 py-3 text-sm text-ink/72">
-                  当前工作流：生成草稿 → 润色回复并高亮批注 → 基于批注重生成 → 保存
-                </div>
-              </div>
-              <ToneGuideBar styleConfig={activeDraft?.style_config ?? currentBatchItem?.selected_style_config_json} />
-              <PolishingEditor
-                value={polishedText}
-                onChange={setPolishedText}
-                annotations={sourceAnnotations}
-                onAddAnnotation={handleAddSourceAnnotation}
-                onRemoveAnnotation={handleRemoveSourceAnnotation}
-              />
-              <ExpertAnnotationPanel
-                value={expertAnnotation}
-                onChange={setExpertAnnotation}
-              />
-              <ResponseVersionPanel
-                versions={responseVersions}
-                activeVersionIndex={activeVersionIndex}
-                canRegenerate={Boolean(selectedPersona && sourceAnnotations.length > 0)}
-                regenerating={regenerateBatchSessionItem.isPending || jobLoading}
-                onRegenerate={handleRegenerateFromAnnotations}
-                onRollback={handleRollbackVersion}
-              />
-              <SaveRecordBar
-                canSave={Boolean(activeDraft && polishedText.trim()) && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
-                isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
-                onSave={handleSave}
-                batchMode={hasVisibleBatch}
-                allCompleted={batchAllCompleted}
-                isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
-                onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
-                exportingReviewedBatch={exportReviewedBatch.isPending}
-              />
-            </section>
-          </div>
+            <ResponseEvaluationPanel
+              value={responseEvaluation}
+              onChange={setResponseEvaluation}
+            />
 
-          <div className="grid gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
+            <ResponseVersionPanel
+              versions={responseVersions}
+              activeVersionIndex={activeVersionIndex}
+              canRegenerate={Boolean(selectedPersona && sourceAnnotations.length > 0)}
+              regenerating={regenerateBatchSessionItem.isPending || jobLoading}
+              onRegenerate={handleRegenerateFromAnnotations}
+              onRollback={handleRollbackVersion}
+            />
+
+            <SaveRecordBar
+              canSave={Boolean(activeDraft && polishedText.trim()) && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
+              isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
+              onSave={handleSave}
+              batchMode={hasVisibleBatch}
+              allCompleted={batchAllCompleted}
+              isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
+              onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
+              exportingReviewedBatch={exportReviewedBatch.isPending}
+            />
+
             {isWorkspaceBatchMode ? (
-              <div className="inline-flex rounded-full border border-line bg-white/72 p-1">
-                <button
-                  type="button"
-                  onClick={() => setRightPanelMode("batch")}
-                  className={`rounded-full px-4 py-2 text-sm transition ${
-                    rightPanelMode === "batch" ? "bg-amber text-white" : "text-ink/72"
-                  }`}
-                >
-                  批量任务
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRightPanelMode("evaluation")}
-                  className={`rounded-full px-4 py-2 text-sm transition ${
-                    rightPanelMode === "evaluation" ? "bg-amber text-white" : "text-ink/72"
-                  }`}
-                >
-                  评价模块
-                </button>
-              </div>
-            ) : null}
-
-            {rightPanelMode === "evaluation" || !isWorkspaceBatchMode ? (
-              <ResponseEvaluationPanel
-                value={responseEvaluation}
-                onChange={setResponseEvaluation}
-                defaultOpen
-              />
-            ) : null}
-
-            {isWorkspaceBatchMode && rightPanelMode === "batch" ? (
               <BatchExcelPanel
                 importing={importBatchExcel.isPending || batchSessions.isLoading}
                 fileName={batchFileName}
@@ -1131,7 +1048,7 @@ export function WorkspacePage() {
                 onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
               />
             ) : null}
-          </div>
+          </aside>
         </div>
 
       </div>

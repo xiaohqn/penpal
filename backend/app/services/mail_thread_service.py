@@ -55,13 +55,14 @@ class MailThreadService:
         if reply_mode == "human":
             assigned_counselor_id = self._pick_counselor_or_none(db) if forced_human else self._pick_counselor(db)
 
+        should_generate_later = reply_mode == "ai" and not payload.ai_reply_text and not crisis
         thread = MailThread(
             user_id=user_id,
             signature=payload.signature or "匿名",
             title=self._build_title(payload.content),
             reply_mode=reply_mode,
-            response_preference=payload.response_preference or "温柔陪伴",
-            status="crisis" if crisis else ("waiting_counselor" if reply_mode == "human" else "waiting_user"),
+            response_preference="理性分析",
+            status="crisis" if crisis else ("waiting_counselor" if reply_mode == "human" else ("waiting_ai" if should_generate_later else "waiting_user")),
             assigned_counselor_id=assigned_counselor_id,
         )
         db.add(thread)
@@ -112,35 +113,8 @@ class MailThreadService:
             ai_message = db.scalar(select(MailMessage).where(MailMessage.thread_id == thread.id).order_by(desc(MailMessage.id)))
             self._record_risk(db, user_id, thread.id, ai_message.id if ai_message else None, "ai_reply", reply_assessment)
         elif reply_mode == "ai":
-            reply_text = payload.ai_reply_text or await self._generate_ai_reply(
-                thread=thread,
-                latest_user_content=payload.content,
-                fallback_preference=payload.response_preference,
-            )
-            reply_text = self._with_ai_signature(reply_text)
-            reply_assessment = self.safety_service.assess_reply(reply_text)
-            if RISK_ORDER[reply_assessment.risk_level] >= RISK_ORDER["HIGH"]:
-                reply_text = self.safety_service.safe_fallback_reply(
-                    counselor_available=self.settings.counselor_features_enabled
-                )
-                reply_text = self._with_ai_signature(reply_text)
-                reply_assessment = self.safety_service.assess_reply(reply_text)
-                if self.settings.counselor_features_enabled:
-                    thread.reply_mode = "human"
-                    thread.status = "waiting_counselor"
-                    thread.assigned_counselor_id = self._pick_counselor_or_none(db)
-            db.add(
-                MailMessage(
-                    thread_id=thread.id,
-                    sender_type="ai",
-                    sender_id="mindful-ai",
-                    content=reply_text,
-                    status="sent",
-                )
-            )
-            db.flush()
-            ai_message = db.scalar(select(MailMessage).where(MailMessage.thread_id == thread.id).order_by(desc(MailMessage.id)))
-            self._record_risk(db, user_id, thread.id, ai_message.id if ai_message else None, "ai_reply", reply_assessment)
+            if payload.ai_reply_text:
+                self._append_ai_reply(db=db, thread=thread, reply_text=payload.ai_reply_text)
         db.commit()
         self.rebuild_memory(db, thread.id)
         db.expire_all()
@@ -253,47 +227,10 @@ class MailThreadService:
             )
             thread.status = "waiting_user"
         elif thread.reply_mode == "ai":
-            reply_text = payload.ai_reply_text or await self._generate_ai_reply(
-                thread=thread,
-                latest_user_content=payload.content,
-                fallback_preference=thread.response_preference,
-            )
-            reply_text = self._with_ai_signature(reply_text)
-            reply_assessment = self.safety_service.assess_reply(reply_text)
-            if RISK_ORDER[reply_assessment.risk_level] >= RISK_ORDER["HIGH"]:
-                reply_text = self.safety_service.safe_fallback_reply(
-                    counselor_available=self.settings.counselor_features_enabled
-                )
-                reply_text = self._with_ai_signature(reply_text)
-                reply_assessment = self.safety_service.assess_reply(reply_text)
-                if self.settings.counselor_features_enabled:
-                    thread.reply_mode = "human"
-                    thread.status = "waiting_counselor"
-                    if thread.assigned_counselor_id is None:
-                        thread.assigned_counselor_id = self._pick_counselor_or_none(db)
-                else:
-                    thread.status = "waiting_user"
+            if payload.ai_reply_text:
+                self._append_ai_reply(db=db, thread=thread, reply_text=payload.ai_reply_text)
             else:
-                thread.status = "waiting_user"
-            db.add(
-                MailMessage(
-                    thread_id=thread.id,
-                    sender_type="ai",
-                    sender_id="mindful-ai",
-                    content=reply_text,
-                    status="sent",
-                )
-            )
-            db.flush()
-            ai_message = db.scalar(select(MailMessage).where(MailMessage.thread_id == thread.id).order_by(desc(MailMessage.id)))
-            self._record_risk(
-                db,
-                user_id,
-                thread.id,
-                ai_message.id if ai_message else None,
-                "ai_reply",
-                reply_assessment,
-            )
+                thread.status = "waiting_ai"
         else:
             thread.status = "waiting_counselor" if self.settings.counselor_features_enabled else "waiting_user"
         db.commit()
@@ -484,7 +421,7 @@ class MailThreadService:
             "kind": "mail_thread_reply",
             "mail_thread_id": thread.id,
             "signature": thread.signature,
-            "response_preference": thread.response_preference or "温柔陪伴",
+            "response_preference": "理性分析",
             "memory_summary": thread.memory.summary if thread.memory else "",
             "risk": {
                 "level": latest_risk.risk_level if latest_risk is not None else "NONE",
@@ -494,7 +431,7 @@ class MailThreadService:
             "transcript": transcript,
             "instruction": (
                 "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。"
-                "需要参考完整上下文、风险提示和用户偏好；不要声称自己是 AI；不要替代医疗诊断或治疗。"
+                "需要参考完整上下文和风险提示；不要声称自己是 AI；不要替代医疗诊断或治疗。"
             ),
         }
 
@@ -600,7 +537,7 @@ class MailThreadService:
     async def _generate_ai_reply(self, thread: MailThread, latest_user_content: str, fallback_preference: str) -> str:
         if self.orchestration_service is None:
             raise ValueError("AI reply generation is not configured")
-        preference = fallback_preference or thread.response_preference or "温柔陪伴"
+        preference = "理性分析"
         persona_name = self._persona_for_preference(preference)
         context_input = self._build_ai_generation_input(thread=thread, latest_user_content=latest_user_content, preference=preference)
         drafts = await self.orchestration_service.generate_all(
@@ -612,6 +549,64 @@ class MailThreadService:
         if not drafts:
             raise ValueError("AI 暂时没有生成回信，请稍后再试")
         return str(drafts[0].get("response") or "").strip()
+
+    async def generate_pending_ai_reply(self, db: Session, user_id: str, thread_id: int) -> None:
+        thread = db.scalar(
+            select(MailThread)
+            .where(MailThread.id == thread_id, MailThread.user_id == user_id)
+            .options(selectinload(MailThread.messages), selectinload(MailThread.memory), selectinload(MailThread.risk_assessments))
+        )
+        if thread is None or thread.status != "waiting_ai" or thread.reply_mode != "ai":
+            return
+        latest_user = next(
+            (message for message in reversed(sorted(thread.messages, key=lambda item: (_datetime_sort_value(item.created_at), item.id))) if message.sender_type == "user"),
+            None,
+        )
+        if latest_user is None:
+            return
+        try:
+            reply_text = await self._generate_ai_reply(
+                thread=thread,
+                latest_user_content=latest_user.content,
+                fallback_preference=thread.response_preference,
+            )
+            self._append_ai_reply(db=db, thread=thread, reply_text=reply_text)
+            db.commit()
+            self.rebuild_memory(db, thread.id)
+        except Exception:
+            thread.status = "waiting_ai"
+            db.commit()
+
+    def _append_ai_reply(self, db: Session, thread: MailThread, reply_text: str) -> None:
+        reply_text = self._with_ai_signature(reply_text)
+        reply_assessment = self.safety_service.assess_reply(reply_text)
+        if RISK_ORDER[reply_assessment.risk_level] >= RISK_ORDER["HIGH"]:
+            reply_text = self.safety_service.safe_fallback_reply(
+                counselor_available=self.settings.counselor_features_enabled
+            )
+            reply_text = self._with_ai_signature(reply_text)
+            reply_assessment = self.safety_service.assess_reply(reply_text)
+            if self.settings.counselor_features_enabled:
+                thread.reply_mode = "human"
+                thread.status = "waiting_counselor"
+                if thread.assigned_counselor_id is None:
+                    thread.assigned_counselor_id = self._pick_counselor_or_none(db)
+            else:
+                thread.status = "waiting_user"
+        else:
+            thread.status = "waiting_user"
+        db.add(
+            MailMessage(
+                thread_id=thread.id,
+                sender_type="ai",
+                sender_id="mindful-ai",
+                content=reply_text,
+                status="sent",
+            )
+        )
+        db.flush()
+        ai_message = db.scalar(select(MailMessage).where(MailMessage.thread_id == thread.id).order_by(desc(MailMessage.id)))
+        self._record_risk(db, thread.user_id, thread.id, ai_message.id if ai_message else None, "ai_reply", reply_assessment)
 
     def _with_ai_signature(self, reply_text: str) -> str:
         stripped = reply_text.strip()
@@ -633,7 +628,7 @@ class MailThreadService:
             part
             for part in [
                 f"【长期记忆摘要】\n{memory}" if memory else "",
-                f"【用户回应偏好】{preference}",
+                "【统一回应策略】理性分析",
                 f"【用户署名】{thread.signature or '匿名'}",
                 f"【最近书信往返】\n{transcript}" if transcript else "",
                 f"【最新来信】\n{latest_user_content}",
@@ -643,11 +638,7 @@ class MailThreadService:
         )
 
     def _persona_for_preference(self, preference: str) -> str:
-        if preference == "理性分析":
-            return "理性破局教练"
-        if preference == "启发引导":
-            return "启发故事导师"
-        return "温暖倾听者"
+        return "理性破局教练"
 
     def _build_title(self, content: str) -> str:
         first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
@@ -660,7 +651,7 @@ class MailThreadService:
         turns = len(user_messages)
         fragments = [
             f"这段书信共有 {len(messages)} 条消息，其中用户来信 {turns} 次。",
-            f"用户希望被回应的方式是「{thread.response_preference or '温柔陪伴'}」。",
+            "系统采用统一的理性分析回信策略。",
         ]
         risk_levels = [assessment.risk_level for assessment in thread.risk_assessments if assessment.target_type == "user_letter"]
         if first_user:
@@ -724,7 +715,7 @@ class MailThreadService:
                 signature=letter.signature,
                 title=self._build_title(letter.letter_text),
                 reply_mode=reply_mode,
-                response_preference=letter.response_preference or "温柔陪伴",
+                response_preference="理性分析",
                 status="completed" if letter.status == "completed" else ("waiting_user" if letter.reply_text else "waiting_counselor"),
                 assigned_counselor_id=letter.assigned_counselor_id,
                 created_at=letter.created_at,

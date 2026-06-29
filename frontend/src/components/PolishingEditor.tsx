@@ -82,13 +82,13 @@ export function PolishingEditor({
   }
 
   return (
-    <section className="rounded-[28px] border border-line bg-white/78 p-6 shadow-soft">
-      <div className="mb-4">
-        <p className="text-sm uppercase tracking-[0.22em] text-amber">Step 3</p>
-        <h2 className="mt-2 font-serif text-3xl text-ink">专家润色区</h2>
-        <p className="mt-2 text-sm leading-7 text-ink/66">
-          在保留当前风格标签的前提下，把草稿修成能直接发送的最终版本。你也可以直接在 AI 回复里划词做高亮批注，再基于这些批注出新版本。
-        </p>
+    <section className="rounded-[22px] border border-line bg-white/78 p-4 shadow-soft md:p-5">
+      <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-amber">回信编辑</p>
+          <h2 className="mt-1 font-serif text-2xl text-ink">专家润色区</h2>
+        </div>
+        <p className="text-sm text-ink/58">选中文字可添加批注并重生成</p>
       </div>
 
       <div className={`grid gap-4 ${sidePanel ? "xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]" : ""}`}>
@@ -97,94 +97,98 @@ export function PolishingEditor({
           onChange={(event) => onChange(event.target.value)}
           onSelect={handleSelection}
           placeholder="选择一个草稿后，这里会自动带入内容，供继续润色。"
-          className="min-h-[360px] w-full rounded-[28px] border border-transparent bg-paper/72 px-5 py-5 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
+          className="min-h-[520px] w-full rounded-[20px] border border-transparent bg-paper/72 px-5 py-4 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
         />
         {sidePanel ? <div className="xl:sticky xl:top-6 xl:self-start">{sidePanel}</div> : null}
       </div>
 
-      <section className="mt-5 rounded-[26px] border border-line bg-paper/68 p-4">
-        <div className="flex items-center gap-2">
-          <Highlighter size={16} className="text-amber" />
-          <p className="text-sm uppercase tracking-[0.2em] text-amber">AI 回复高亮批注</p>
-        </div>
-        <p className="mt-2 text-sm leading-7 text-ink/66">
-          在当前 AI 回复中选中某一段文字后，可以记录“哪里不满意、哪里需要补充、哪里语气不对”。后续重生成会基于这些被标记的回复片段调整版本。
-        </p>
-
-        {selectionRange ? (
-          <div className="mt-4 rounded-[22px] border border-amber/35 bg-white/82 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-ink/42">当前选中回复片段</p>
-            <p className="mt-2 rounded-2xl bg-paper/85 px-3 py-3 text-sm leading-7 text-ink">{selectionRange.quote}</p>
-            <textarea
-              value={annotationNote}
-              onChange={(event) => setAnnotationNote(event.target.value)}
-              placeholder="例如：这句太空泛、这里需要更温柔、这里要补一个更具体的建议。"
-              className="mt-3 min-h-[100px] w-full rounded-2xl border border-transparent bg-paper/72 px-4 py-4 text-sm leading-7 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.12)]"
-            />
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={handleAddAnnotation}
-                className="inline-flex items-center gap-2 rounded-full bg-amber px-4 py-2 text-sm text-white transition hover:-translate-y-0.5"
-              >
-                <Plus size={15} />
-                添加批注
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectionRange(null);
-                  setAnnotationNote("");
-                }}
-                className="rounded-full border border-line bg-white/75 px-4 py-2 text-sm text-ink"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <details className="mt-4 rounded-[22px] border border-line bg-white/82 p-4">
+      <section className="mt-4 rounded-[20px] border border-line bg-paper/68 p-4">
+        <details open={Boolean(selectionRange || annotations.length)}>
           <summary className="cursor-pointer list-none">
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-              <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
-              <p className="text-xs text-ink/50">
-                {annotations.length > 0 ? `${annotations.length} 条批注，点击展开查看` : "暂无批注"}
-              </p>
+              <div className="flex items-center gap-2">
+                <Highlighter size={16} className="text-amber" />
+                <p className="text-sm uppercase tracking-[0.18em] text-amber">高亮批注</p>
+              </div>
+              <p className="text-xs text-ink/50">{annotations.length ? `${annotations.length} 条批注` : "可折叠"}</p>
             </div>
           </summary>
-          <div
-            className="mt-3 whitespace-pre-wrap text-sm leading-8 text-ink"
-            dangerouslySetInnerHTML={{ __html: highlightedPreview || "暂无高亮批注。" }}
-          />
-        </details>
 
-        {annotations.length > 0 ? (
-          <div className="mt-4 grid gap-3">
-            {annotations.map((annotation, index) => (
-              <div key={annotation.id} className="rounded-[22px] border border-line bg-white/82 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-ink/42">批注 {index + 1}</p>
-                    <p className="mt-2 rounded-2xl bg-paper/85 px-3 py-2 text-sm leading-7 text-ink">
-                      {annotation.quote || "未记录回复片段"}
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-ink/74">{annotation.note || "暂无说明"}</p>
-                  </div>
-                  {onRemoveAnnotation ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAnnotation(annotation.id)}
-                      className="rounded-full border border-line bg-paper/75 px-3 py-1 text-xs text-ink"
-                    >
-                      删除
-                    </button>
-                  ) : null}
-                </div>
+          {selectionRange ? (
+            <div className="mt-4 rounded-[18px] border border-amber/35 bg-white/82 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-ink/42">当前选中回复片段</p>
+              <p className="mt-2 rounded-2xl bg-paper/85 px-3 py-3 text-sm leading-7 text-ink">{selectionRange.quote}</p>
+              <textarea
+                value={annotationNote}
+                onChange={(event) => setAnnotationNote(event.target.value)}
+                placeholder="例如：这句太空泛、这里需要更温柔、这里要补一个更具体的建议。"
+                className="mt-3 min-h-[88px] w-full rounded-2xl border border-transparent bg-paper/72 px-4 py-3 text-sm leading-7 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.12)]"
+              />
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleAddAnnotation}
+                  className="inline-flex items-center gap-2 rounded-full bg-amber px-4 py-2 text-sm text-white transition hover:-translate-y-0.5"
+                >
+                  <Plus size={15} />
+                  添加批注
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectionRange(null);
+                    setAnnotationNote("");
+                  }}
+                  className="rounded-full border border-line bg-white/75 px-4 py-2 text-sm text-ink"
+                >
+                  取消
+                </button>
               </div>
-            ))}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+
+          {annotations.length > 0 ? (
+            <div className="mt-4 grid gap-3">
+              {annotations.map((annotation, index) => (
+                <div key={annotation.id} className="rounded-[18px] border border-line bg-white/82 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-ink/42">批注 {index + 1}</p>
+                      <p className="mt-2 rounded-2xl bg-paper/85 px-3 py-2 text-sm leading-7 text-ink">
+                        {annotation.quote || "未记录回复片段"}
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-ink/74">{annotation.note || "暂无说明"}</p>
+                    </div>
+                    {onRemoveAnnotation ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAnnotation(annotation.id)}
+                        className="rounded-full border border-line bg-paper/75 px-3 py-1 text-xs text-ink"
+                      >
+                        删除
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <details className="mt-4 rounded-[18px] border border-line bg-white/82 p-4">
+            <summary className="cursor-pointer list-none">
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
+                <p className="text-xs text-ink/50">
+                  {annotations.length > 0 ? "点击展开查看" : "暂无批注"}
+                </p>
+              </div>
+            </summary>
+            <div
+              className="mt-3 max-h-[240px] overflow-y-auto whitespace-pre-wrap text-sm leading-8 text-ink"
+              dangerouslySetInnerHTML={{ __html: highlightedPreview || "暂无高亮批注。" }}
+            />
+          </details>
+        </details>
       </section>
     </section>
   );

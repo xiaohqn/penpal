@@ -33,6 +33,10 @@ def get_db_session(request: Request) -> Generator[Session, None, None]:
         db.close()
 
 
+def get_session_maker(request: Request):
+    return request.app.state.session_maker
+
+
 def get_persona_service(request: Request) -> PersonaService:
     return request.app.state.persona_service
 

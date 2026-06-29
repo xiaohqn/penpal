@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 
 from app.api.auth import get_counselor_id, get_user_id
-from app.api.deps import get_batch_session_service, get_db_session, get_mail_thread_service
+from app.api.deps import get_batch_session_service, get_db_session, get_mail_thread_service, get_session_maker
 from app.schemas.mail_thread import (
     CounselorThreadReplyRequest,
     MailThreadArchiveResponse,
@@ -18,15 +19,33 @@ from app.services.mail_thread_service import MailThreadService
 router = APIRouter(prefix="/mail-threads", tags=["mail-threads"])
 
 
+async def _generate_ai_reply_background(
+    session_maker: sessionmaker,
+    mail_thread_service: MailThreadService,
+    user_id: str,
+    thread_id: int,
+) -> None:
+    db = session_maker()
+    try:
+        await mail_thread_service.generate_pending_ai_reply(db=db, user_id=user_id, thread_id=thread_id)
+    finally:
+        db.close()
+
+
 @router.post("", response_model=MailThreadResponse, status_code=status.HTTP_201_CREATED)
 async def create_mail_thread(
     payload: MailThreadCreateRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db_session),
+    session_maker: sessionmaker = Depends(get_session_maker),
     mail_thread_service: MailThreadService = Depends(get_mail_thread_service),
 ) -> MailThreadResponse:
     try:
-        return await mail_thread_service.create_thread(db=db, user_id=user_id, payload=payload)
+        thread = await mail_thread_service.create_thread(db=db, user_id=user_id, payload=payload)
+        if thread.status == "waiting_ai":
+            background_tasks.add_task(_generate_ai_reply_background, session_maker, mail_thread_service, user_id, thread.id)
+        return thread
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -144,13 +163,17 @@ def get_mail_thread(
 async def add_mail_thread_message(
     thread_id: int,
     payload: MailMessageCreateRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db_session),
+    session_maker: sessionmaker = Depends(get_session_maker),
     mail_thread_service: MailThreadService = Depends(get_mail_thread_service),
 ) -> MailThreadResponse:
     thread = await mail_thread_service.add_user_message(db=db, user_id=user_id, thread_id=thread_id, payload=payload)
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    if thread.status == "waiting_ai":
+        background_tasks.add_task(_generate_ai_reply_background, session_maker, mail_thread_service, user_id, thread.id)
     return thread
 
 

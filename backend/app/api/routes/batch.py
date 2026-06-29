@@ -326,12 +326,12 @@ def _build_generation_input(user_input: str, context: dict | None) -> str:
         user_input,
         f"【系统记忆摘要】\n{memory_summary}" if memory_summary else "",
         risk_block,
-        f"【用户回应偏好】{context.get('response_preference') or '温柔陪伴'}",
+        "【统一回应策略】理性分析",
         f"【用户署名】{context.get('signature') or '匿名'}",
         f"【完整书信往返】\n{transcript}" if transcript else "",
         str(
             context.get("instruction")
-            or "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文、风险提示和用户偏好；不要声称自己是 AI；不要替代医疗诊断或治疗。"
+            or "请为咨询师生成一封可审阅修改后发送给用户的书信式回信。需要参考完整上下文和风险提示；不要声称自己是 AI；不要替代医疗诊断或治疗。"
         ),
     ]
     return "\n\n".join(part for part in parts if part.strip())
