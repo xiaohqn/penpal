@@ -12,6 +12,24 @@ type Props = {
   onRollback: (versionIndex: number) => void;
 };
 
+function formatVersionTime(value: string) {
+  if (!value) {
+    return "未记录时间";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
 export function ResponseVersionPanel({
   versions,
   activeVersionIndex,
@@ -25,7 +43,7 @@ export function ResponseVersionPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-moss">版本管理</p>
-          <h2 className="mt-1 font-serif text-xl text-ink">重新生成</h2>
+          <h2 className="mt-1 font-serif text-xl text-ink">局部修订</h2>
         </div>
         <button
           type="button"
@@ -34,7 +52,7 @@ export function ResponseVersionPanel({
           className="inline-flex items-center justify-center gap-2 rounded-full bg-amber px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-amber/45"
         >
           <GitBranchPlus size={16} />
-          {regenerating ? "生成中..." : "重新生成"}
+          {regenerating ? "改写中..." : "局部应用批注"}
         </button>
       </div>
 
@@ -57,15 +75,12 @@ export function ResponseVersionPanel({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-ink">{version.label || `版本 ${version.version_index + 1}`}</span>
-                        <span className="rounded-full bg-white/75 px-2 py-1 text-xs text-ink/64">
-                          {version.source === "annotation_regenerate" ? "批注重生成" : version.source}
-                        </span>
                         {isActive ? (
                           <span className="rounded-full bg-amber px-2 py-1 text-xs text-white">当前生效</span>
                         ) : null}
                       </div>
                       <p className="mt-2 text-xs uppercase tracking-[0.16em] text-ink/42">
-                        {version.selected_persona_name || "未标记风格"} · {version.created_at || "未记录时间"}
+                        {formatVersionTime(version.created_at)}
                       </p>
                       <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm leading-7 text-ink/74">
                         {version.response}

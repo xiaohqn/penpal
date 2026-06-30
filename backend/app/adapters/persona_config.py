@@ -41,10 +41,10 @@ PERSONAS: dict[str, dict[str, str]] = {
         "advice": "结构引导",
         "empathy": "理性克制",
         "cognitive": "认知解绑",
-        "empathy_ratio": "10%-15%",
+        "empathy_ratio": "15%-20%",
         "analysis_ratio": "40%-45%",
-        "action_ratio": "35%-40%",
-        "target_length": "1150-1500字之间",
+        "action_ratio": "30%-35%",
+        "target_length": "900-1150字之间",
     },
     "启发故事导师": {
         "narrative": "启发故事",

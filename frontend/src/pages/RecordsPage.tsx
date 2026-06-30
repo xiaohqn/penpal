@@ -12,10 +12,13 @@ export function RecordsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const recordsQuery = useRecords(1, 10, scope);
+  const recordsQuery = useRecords(page, 20, scope);
   const recordQuery = useRecord(selectedId, scope);
   const exportRecords = useExportRecordsExcel();
+  const total = recordsQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / 20));
 
   async function handleExport() {
     const blob = await exportRecords.mutateAsync(scope);
@@ -52,6 +55,7 @@ export function RecordsPage() {
                   type="button"
                   onClick={() => {
                     setScope("mine");
+                    setPage(1);
                     setSelectedId(null);
                   }}
                   className={`rounded-full px-4 py-2 text-sm transition ${
@@ -64,6 +68,7 @@ export function RecordsPage() {
                   type="button"
                   onClick={() => {
                     setScope("all");
+                    setPage(1);
                     setSelectedId(null);
                   }}
                   className={`rounded-full px-4 py-2 text-sm transition ${
@@ -106,11 +111,42 @@ export function RecordsPage() {
             {recordsQuery.isLoading ? (
               <LoadingSkeleton />
             ) : (
-              <RecordTable
-                items={recordsQuery.data?.items ?? []}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
+              <div className="grid gap-3">
+                <div className="flex flex-col gap-3 rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm text-ink/68 shadow-card sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    共 {total} 条记录，当前第 {page} / {totalPages} 页
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={page <= 1 || recordsQuery.isFetching}
+                      onClick={() => {
+                        setPage((current) => Math.max(1, current - 1));
+                        setSelectedId(null);
+                      }}
+                      className="rounded-full border border-line bg-paper/70 px-4 py-2 text-sm text-ink transition disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      上一页
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page >= totalPages || recordsQuery.isFetching}
+                      onClick={() => {
+                        setPage((current) => Math.min(totalPages, current + 1));
+                        setSelectedId(null);
+                      }}
+                      className="rounded-full border border-line bg-paper/70 px-4 py-2 text-sm text-ink transition disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
+                <RecordTable
+                  items={recordsQuery.data?.items ?? []}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+              </div>
             )}
           </section>
           <section>

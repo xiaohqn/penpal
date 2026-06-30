@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
-import { fetchPersonaCatalog, generateFromPlan, streamGenerations } from "./api";
+import { fetchPersonaCatalog, generateFromPlan, rewriteAnnotations, streamGenerations } from "./api";
+import type { SourceAnnotation } from "../records/types";
 import type { DraftCandidate, DraftState, PlannerOutput } from "./types";
 
 export function usePersonas() {
@@ -176,6 +177,26 @@ export function useGenerationWorkspace() {
     },
   });
 
+  const rewriteAnnotationsMutation = useMutation({
+    mutationFn: async (payload: {
+      current_response: string;
+      annotations: SourceAnnotation[];
+      expert_annotation: string;
+      persona_name: string;
+      source_mode?: string;
+    }) => {
+      setJobLoading(true);
+      setJobError(null);
+      const result = await rewriteAnnotations(payload);
+      setJobLoading(false);
+      return result;
+    },
+    onError: (error) => {
+      setJobLoading(false);
+      setJobError(error instanceof Error ? error.message : "局部批注改写失败");
+    },
+  });
+
   const orderedDrafts = Object.values(drafts);
   const activeDraft =
     orderedDrafts.find((item) => item.draft_id === selectedPersona) ?? orderedDrafts[0] ?? null;
@@ -230,6 +251,7 @@ export function useGenerationWorkspace() {
     jobError,
     startGeneration: mutation.mutateAsync,
     generateDraftFromPlan: planMutation.mutateAsync,
+    rewriteAnnotatedFragments: rewriteAnnotationsMutation.mutateAsync,
     updateDraftPlanner,
     resetWorkspace,
     hydrateWorkspace,

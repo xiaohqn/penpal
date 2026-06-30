@@ -88,6 +88,40 @@ class GeneratorService:
         response, _ = parse_response_only(raw)
         return {"raw": raw, "response": self._normalize_letter_format(response)}
 
+    async def generate_raw_with_mode(
+        self,
+        messages: list[dict[str, str]],
+        mode: str,
+        temperature: float = 0.55,
+    ) -> str:
+        if mode == "local":
+            local_model_path = self.settings.resolve_local_generator_model_path()
+            if local_model_path is None:
+                raise ValueError("LOCAL_MODEL_PATH or LOCAL_GENERATOR_MODEL_PATH is not configured")
+            return await self.llm_client.complete_local(
+                model_path=local_model_path,
+                messages=messages,
+                temperature=temperature,
+                max_new_tokens=self.settings.local_generator_max_new_tokens,
+            )
+        if mode == "vllm":
+            if not self.settings.vllm_model_name:
+                raise ValueError("VLLM_MODEL_NAME is not configured")
+            return await self.llm_client.complete_api(
+                provider="vllm",
+                model=self.settings.vllm_model_name,
+                messages=messages,
+                temperature=temperature,
+                timeout=self.settings.generator_timeout_seconds,
+            )
+        return await self.llm_client.complete_api(
+            provider="doubao",
+            model=self.settings.generator_model,
+            messages=messages,
+            temperature=temperature,
+            timeout=self.settings.generator_timeout_seconds,
+        )
+
     def split_text(self, text: str) -> list[str]:
         chunk_size = max(1, self.settings.stream_chunk_size)
         return [text[index : index + chunk_size] for index in range(0, len(text), chunk_size)] or [""]

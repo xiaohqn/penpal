@@ -67,6 +67,30 @@ class GenerateFromPlanRequest(BaseModel):
         return normalized
 
 
+class AnnotationRewriteItem(BaseModel):
+    id: str = Field(min_length=1)
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    quote: str = ""
+    note: str = ""
+
+
+class RewriteAnnotationsRequest(BaseModel):
+    current_response: str = Field(min_length=1, max_length=12000)
+    annotations: list[AnnotationRewriteItem] = Field(min_length=1, max_length=20)
+    expert_annotation: str = ""
+    persona_name: str = Field(min_length=1)
+    source_mode: str = "auto"
+
+    @field_validator("source_mode")
+    @classmethod
+    def validate_source_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"auto", "api", "vllm", "mock"}:
+            raise ValueError("source_mode must be one of: auto, api, vllm, mock")
+        return normalized
+
+
 class StreamEvent(BaseModel):
     event: str
     draft_id: str | None = None

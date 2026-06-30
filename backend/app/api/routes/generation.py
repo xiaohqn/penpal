@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_orchestration_service, get_settings
 from app.core.config import Settings
-from app.schemas.generation import GenerateFromPlanRequest, GenerationRequest
+from app.schemas.generation import GenerateFromPlanRequest, GenerationRequest, RewriteAnnotationsRequest
 from app.services.orchestration_service import OrchestrationService
 
 router = APIRouter(prefix="/generations", tags=["generations"])
@@ -51,5 +51,19 @@ async def generate_from_plan(
         user_input=payload.user_input,
         persona_name=payload.persona_name,
         planner_output=payload.planner_output,
+        source_mode=payload.source_mode,
+    )
+
+
+@router.post("/rewrite-annotations")
+async def rewrite_annotations(
+    payload: RewriteAnnotationsRequest,
+    orchestration_service: OrchestrationService = Depends(get_orchestration_service),
+) -> dict:
+    return await orchestration_service.rewrite_annotations(
+        current_response=payload.current_response,
+        annotations=[annotation.model_dump() for annotation in payload.annotations],
+        expert_annotation=payload.expert_annotation,
+        persona_name=payload.persona_name,
         source_mode=payload.source_mode,
     )

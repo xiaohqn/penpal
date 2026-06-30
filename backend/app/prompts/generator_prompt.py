@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+MAX_RAG_REFERENCES = 1
+
 
 def build_generator_system_prompt(planner_output: dict[str, Any], style_summary: dict[str, str]) -> str:
     rag_references = planner_output.get("rag_references") or []
@@ -64,7 +66,7 @@ def _render_rag_references(rag_references: Any) -> str:
         return "暂无可用 few-shot 样本。"
 
     blocks: list[str] = []
-    for index, reference in enumerate(rag_references[:2], start=1):
+    for index, reference in enumerate(rag_references[:MAX_RAG_REFERENCES], start=1):
         if not isinstance(reference, dict):
             continue
         source = "现场种子库" if reference.get("source") == "seed" else "专家记录"

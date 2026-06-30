@@ -1,5 +1,6 @@
 import { request } from "../../lib/request";
 import { streamPost } from "../../lib/sse";
+import type { SourceAnnotation } from "../records/types";
 import type { DraftCandidate, PersonaCatalogResponse, PlannerOutput } from "./types";
 
 export async function fetchPersonaCatalog() {
@@ -20,6 +21,19 @@ export function generateFromPlan(payload: {
   source_mode?: string;
 }) {
   return request<DraftCandidate>("/generations/from-plan", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function rewriteAnnotations(payload: {
+  current_response: string;
+  annotations: SourceAnnotation[];
+  expert_annotation: string;
+  persona_name: string;
+  source_mode?: string;
+}) {
+  return request<{ revisions: Array<{ id: string; revised_text: string }>; raw?: string }>("/generations/rewrite-annotations", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -5,6 +5,7 @@ import { LogOut, ScrollText, Sparkles } from "lucide-react";
 import { useAuth } from "../app/auth";
 import { BatchExcelPanel } from "../components/BatchExcelPanel";
 import { DraftStreamTabs } from "../components/DraftStreamTabs";
+import { ExpertAnnotationPanel } from "../components/ExpertAnnotationPanel";
 import { MailThreadContextPanel } from "../components/MailThreadContextPanel";
 import { PlannerInsightAccordion } from "../components/PlannerInsightAccordion";
 import { PolishingEditor } from "../components/PolishingEditor";
@@ -190,6 +191,43 @@ function isMailBatchItem(item: Pick<WorkspaceBatchItem, "mail_thread_id" | "cont
   return Boolean(item.mail_thread_id || isMailThreadContext(item.context_json));
 }
 
+function applyAnnotationRevisions(
+  original: string,
+  annotations: SourceAnnotation[],
+  revisions: Array<{ id: string; revised_text: string }>,
+) {
+  const revisionById = new Map(revisions.map((revision) => [revision.id, revision.revised_text]));
+  const patches = annotations
+    .map((annotation) => {
+      const revisedText = revisionById.get(annotation.id)?.trim();
+      if (!revisedText) {
+        return null;
+      }
+      const boundedStart = Math.max(0, Math.min(annotation.start, original.length));
+      const boundedEnd = Math.max(boundedStart, Math.min(annotation.end, original.length));
+      const currentSlice = original.slice(boundedStart, boundedEnd);
+      if (currentSlice === annotation.quote || !annotation.quote) {
+        return { start: boundedStart, end: boundedEnd, revisedText };
+      }
+      const quoteIndex = original.indexOf(annotation.quote);
+      if (quoteIndex >= 0) {
+        return { start: quoteIndex, end: quoteIndex + annotation.quote.length, revisedText };
+      }
+      return { start: boundedStart, end: boundedEnd, revisedText };
+    })
+    .filter((patch): patch is { start: number; end: number; revisedText: string } => patch !== null)
+    .sort((a, b) => b.start - a.start);
+
+  return patches.reduce(
+    (text, patch) => `${text.slice(0, patch.start)}${patch.revisedText}${text.slice(patch.end)}`,
+    original,
+  );
+}
+
+function countVersionsBySource(versions: ResponseVersion[], source: string) {
+  return versions.filter((version) => version.source === source).length;
+}
+
 export function WorkspacePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -205,6 +243,7 @@ export function WorkspacePage() {
     jobError,
     startGeneration,
     generateDraftFromPlan,
+    rewriteAnnotatedFragments,
     updateDraftPlanner,
     resetWorkspace,
     hydrateWorkspace,
@@ -266,6 +305,7 @@ export function WorkspacePage() {
   const batchAllCompleted = visibleBatchItems.length > 0 && batchCompletedCount === visibleBatchItems.length;
   const completedRowNumbers = visibleBatchItems.filter((item) => item.status === "completed").map((item) => item.row_number);
   const reviewedBatchItems = buildReviewedItems(visibleBatchItems);
+  const generationBusy = jobLoading || regenerateBatchSessionItem.isPending;
   const legacySplit = currentBatchItem ? splitLegacyMailThreadInput(currentBatchItem.user_input) : null;
   const currentWorkspaceContext =
     currentBatchItem && isMailThreadContext(currentBatchItem.context_json)
@@ -634,100 +674,96 @@ export function WorkspacePage() {
       setStatusText("请先在 AI 回复中添加至少一条高亮批注，再进行重生成。");
       return;
     }
+    if (!activeDraft) {
+      setStatusText("请先生成或选择一份草稿，再进行批注重生成。");
+      return;
+    }
 
     try {
-      if (!currentBatchItem) {
-        const draftsFromRegenerate = await startGeneration({
-          user_input: `${buildGenerationInput(userInput, currentWorkspaceContext)}\n\n【当前 AI 回复】\n${polishedText}\n\n【专家对当前 AI 回复的高亮批注】\n${sourceAnnotations
-            .map(
-              (annotation, index) =>
-                `${index + 1}. 回复片段：${annotation.quote || "未填写"}；专家批注：${annotation.note || "未填写"}`,
-            )
-            .join("\n")}\n\n【专家总体说明】\n${expertAnnotation}`.trim(),
-          persona_names: selectedPersonas.length > 0 ? selectedPersonas : [activeDraft?.persona_name ?? DEFAULT_PERSONA_NAME],
-          compare_sources: false,
-          source_mode: "auto",
-        });
-
-        const selectedDraft =
-          draftsFromRegenerate.find((draft) => draft.draft_id === selectedPersona) ??
-          draftsFromRegenerate[0] ??
-          null;
-
-        if (selectedDraft) {
-          const existingVersions =
-            responseVersions.length > 0
-              ? responseVersions
-              : [
-                  {
-                    version_index: 0,
-                    label: "专家当前版本",
-                    response: polishedText,
-                    selected_persona_name: activeDraft?.persona_name ?? "未标记风格",
-                    created_at: new Date().toISOString(),
-                    source: "manual",
-                    source_annotations: sourceAnnotations,
-                  },
-                ];
-
-          const nextVersion = {
-            version_index: existingVersions.length,
-            label: `批注重生成 v${existingVersions.length + 1}`,
-            response: selectedDraft.response,
-            selected_persona_name: selectedDraft.persona_name,
-            created_at: new Date().toISOString(),
-            source: "annotation_regenerate",
-            source_annotations: sourceAnnotations,
-            safety_review: selectedDraft.safety_review ?? {},
-          };
-
-          setResponseVersions([...existingVersions, nextVersion]);
-          setActiveVersionIndex(nextVersion.version_index);
-          setPolishedText(selectedDraft.response);
-          setResponseEvaluation(EMPTY_EVALUATION);
-          setSelectedPersona(selectedDraft.draft_id);
-          setStatusText("已基于 AI 回复高亮批注重新生成，并新增一条可回退的回复版本。");
-        }
-        return;
-      }
-
-      const detail = await regenerateBatchSessionItem.mutateAsync({
-        sessionId: currentBatchItem.session_id as number,
-        itemId: currentBatchItem.id as number,
-        payload: {
-          selected_persona_name: activeDraft?.persona_name ?? currentBatchItem.selected_persona_name,
-          selected_persona_names: selectedPersonas,
-          source_annotations: sourceAnnotations,
-          expert_annotation: expertAnnotation,
-          current_response: polishedText,
-          planner_output: activeDraft?.planner_output ?? currentBatchItem.planner_output_json ?? {},
-        },
+      setStatusText("正在局部改写高亮批注片段，未批注部分会保持不变。");
+      const rewriteResult = await rewriteAnnotatedFragments({
+        current_response: polishedText,
+        annotations: sourceAnnotations,
+        expert_annotation: expertAnnotation,
+        persona_name: activeDraft.persona_name,
+        source_mode: "auto",
       });
+      const rewrittenText = applyAnnotationRevisions(polishedText, sourceAnnotations, rewriteResult.revisions);
+      const existingVersions =
+        responseVersions.length > 0
+          ? responseVersions
+          : [
+              {
+                version_index: 0,
+                label: "专家当前版本",
+                response: polishedText,
+                selected_persona_name: activeDraft.persona_name,
+                created_at: new Date().toISOString(),
+                source: "manual",
+                source_annotations: sourceAnnotations,
+              },
+            ];
 
-      const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
-      if (updatedItem) {
-        hydrateWorkspace({
-          drafts: updatedItem.draft_candidates_json.map((draft) => ({
-            draft_id: String(draft.draft_id ?? `${String(draft.persona_name ?? "")}::${String(draft.source ?? "api")}`),
-            persona_name: String(draft.persona_name ?? ""),
-            source: String(draft.source ?? "api"),
-            source_label: String(draft.source_label ?? "API 模型"),
-            style_config: (draft.style_config ?? {}) as Record<string, string>,
-            planner_output: (draft.planner_output ?? {}) as Record<string, unknown>,
-            response: String(draft.response ?? ""),
-            raw_response: String(draft.raw_response ?? ""),
-            safety_review: (draft.safety_review ?? {}) as Record<string, unknown>,
-          })),
-          selectedPersona: String(updatedItem.draft_candidates_json[0]?.draft_id ?? "") || selectedPersona,
+      const nextVersion = {
+        version_index: existingVersions.length,
+        label: `局部修订 ${countVersionsBySource(existingVersions, "annotation_patch") + 1}`,
+        response: rewrittenText,
+        selected_persona_name: activeDraft.persona_name,
+        created_at: new Date().toISOString(),
+        source: "annotation_patch",
+        source_annotations: sourceAnnotations,
+      };
+
+      setResponseVersions([...existingVersions, nextVersion]);
+      setActiveVersionIndex(nextVersion.version_index);
+      setPolishedText(rewrittenText);
+      setResponseEvaluation(EMPTY_EVALUATION);
+
+      if (currentBatchItem) {
+        const detail = await updateBatchSessionItem.mutateAsync({
+          sessionId: currentBatchItem.session_id as number,
+          itemId: currentBatchItem.id as number,
+          payload: {
+            selected_persona_name: activeDraft.persona_name,
+            selected_persona_names: selectedPersonas,
+            selected_style_config: activeDraft.style_config,
+            planner_output: activeDraft.planner_output,
+            draft_candidates: drafts,
+            ai_selected_raw_response: activeDraft.response,
+            latest_response: rewrittenText,
+            expert_annotation: expertAnnotation,
+            rag_ready: deriveRagReady(),
+            sample_reason: "",
+            sample_tags: {},
+            planner_labels: {},
+            risk_assessment: activeDraft.safety_review ?? {},
+            evaluation: EMPTY_EVALUATION,
+            sample_snapshot: {
+              ...buildSampleSnapshot(),
+              expert_polished_response: rewrittenText,
+              response_versions: [...existingVersions, nextVersion],
+              active_version_index: nextVersion.version_index,
+            },
+            source_annotations: sourceAnnotations,
+            response_versions: [...existingVersions, nextVersion],
+            active_version_index: nextVersion.version_index,
+            status: currentBatchItem.status === "completed" ? "completed" : "in_progress",
+            record_id: currentBatchItem.record_id ?? null,
+            mail_thread_id: currentBatchItem.mail_thread_id ?? null,
+            context: currentBatchItem.context_json ?? {},
+          },
         });
-        setResponseVersions(updatedItem.response_versions_json ?? []);
-        setActiveVersionIndex(updatedItem.active_version_index ?? 0);
-        setPolishedText(updatedItem.latest_response ?? polishedText);
-        setResponseEvaluation(EMPTY_EVALUATION);
-        setStatusText("已基于 AI 回复高亮批注重新生成，并新增一条可回退的回复版本。");
+        const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
+        if (updatedItem) {
+          setResponseVersions(updatedItem.response_versions_json ?? [...existingVersions, nextVersion]);
+          setActiveVersionIndex(updatedItem.active_version_index ?? nextVersion.version_index);
+          setPolishedText(updatedItem.latest_response ?? rewrittenText);
+          setSourceAnnotations(updatedItem.source_annotations_json ?? sourceAnnotations);
+        }
       }
+      setStatusText("已只改写高亮批注片段，未批注部分保持不变，并新增一条可回退版本。");
     } catch (error) {
-      setStatusText(error instanceof Error ? error.message : "批注重生成失败");
+      setStatusText(error instanceof Error ? error.message : "局部批注改写失败");
     }
   }
 
@@ -843,7 +879,7 @@ export function WorkspacePage() {
       setSelectedPersona(version.selected_persona_name);
       setSourceAnnotations(version.source_annotations ?? []);
       setResponseEvaluation(EMPTY_EVALUATION);
-      setStatusText(`已回退到版本 ${versionIndex + 1}。`);
+      setStatusText(`已回退到版本 ${versionIndex + 1}`);
       return;
     }
     try {
@@ -860,7 +896,7 @@ export function WorkspacePage() {
         setSelectedPersonas(personas[0]?.name ? [personas[0].name] : selectedPersonas);
         setSourceAnnotations(updatedItem.source_annotations_json ?? sourceAnnotations);
         setResponseEvaluation(EMPTY_EVALUATION);
-        setStatusText(`已回退到版本 ${versionIndex + 1}。`);
+        setStatusText(`已回退到版本 ${versionIndex + 1}`);
       }
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "版本回退失败");
@@ -1004,7 +1040,12 @@ export function WorkspacePage() {
               plannerOutput={activeDraft?.planner_output}
               onChange={handlePlannerChange}
               onRegenerate={handleRegenerateFromPlanner}
-              regenerating={jobLoading || regenerateBatchSessionItem.isPending}
+              regenerating={generationBusy}
+            />
+
+            <ExpertAnnotationPanel
+              value={expertAnnotation}
+              onChange={setExpertAnnotation}
             />
 
             <ResponseEvaluationPanel
@@ -1016,13 +1057,13 @@ export function WorkspacePage() {
               versions={responseVersions}
               activeVersionIndex={activeVersionIndex}
               canRegenerate={Boolean(selectedPersona && sourceAnnotations.length > 0)}
-              regenerating={regenerateBatchSessionItem.isPending || jobLoading}
+              regenerating={generationBusy}
               onRegenerate={handleRegenerateFromAnnotations}
               onRollback={handleRollbackVersion}
             />
 
             <SaveRecordBar
-              canSave={Boolean(activeDraft && polishedText.trim()) && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
+              canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
               isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
               onSave={handleSave}
               batchMode={hasVisibleBatch}

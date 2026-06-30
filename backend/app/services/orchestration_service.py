@@ -12,6 +12,8 @@ from app.services.planner_service import PlannerService
 from app.services.rag_service import RagService
 from app.services.safety_service import RISK_ORDER, SafetyService
 
+RAG_REFERENCE_LIMIT = 1
+
 
 class OrchestrationService:
     def __init__(
@@ -252,6 +254,70 @@ class OrchestrationService:
             "safety_review": reviewed_draft["safety_review"],
         }
 
+    async def rewrite_annotations(
+        self,
+        current_response: str,
+        annotations: list[dict[str, Any]],
+        expert_annotation: str,
+        persona_name: str,
+        source_mode: str = "auto",
+    ) -> dict[str, Any]:
+        normalized_persona = normalize_persona_name(persona_name)
+        target = self._build_generator_targets(False, source_mode)[0]
+        if target["mode"] == "mock":
+            revisions = [
+                {
+                    "id": str(annotation.get("id", "")),
+                    "revised_text": str(annotation.get("quote") or current_response[int(annotation.get("start", 0)): int(annotation.get("end", 0))]),
+                }
+                for annotation in annotations
+            ]
+            return {"revisions": revisions}
+
+        annotation_lines = []
+        for index, annotation in enumerate(annotations, start=1):
+            annotation_lines.append(
+                "\n".join(
+                    [
+                        f"{index}. id: {annotation.get('id', '')}",
+                        f"原片段: {annotation.get('quote', '')}",
+                        f"专家批注: {annotation.get('note', '')}",
+                    ]
+                )
+            )
+        prompt = "\n\n".join(annotation_lines)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是专业的心理回信局部润色助手。你只改写专家批注指出的片段，"
+                    "不要重写全文，不要输出未被批注的内容。保持原回信的人称、语气、称呼和上下文连贯。"
+                    "每个 revised_text 必须能直接替换原片段；不要加编号、解释、Markdown 或引号。"
+                    '只输出 JSON：{"revisions":[{"id":"批注 id","revised_text":"替换文本"}]}'
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"【当前完整回信，仅供理解上下文】\n{current_response}\n\n"
+                    f"【专家总体说明】\n{expert_annotation or '暂无'}\n\n"
+                    f"【需要局部改写的批注片段】\n{prompt}"
+                ),
+            },
+        ]
+        raw = await self.generator_service.generate_raw_with_mode(
+            messages=messages,
+            mode=target["mode"],
+            temperature=0.35,
+        )
+        from app.utils.json_parse import safe_json_parse
+
+        parsed = safe_json_parse(raw) or {}
+        revisions = parsed.get("revisions")
+        if not isinstance(revisions, list):
+            raise ValueError("局部批注改写没有返回有效 revisions")
+        return {"revisions": revisions, "raw": raw}
+
     def _review_draft_response(self, response: str) -> dict[str, Any]:
         assessment = self.safety_service.assess_reply(response)
         blocked = RISK_ORDER.get(assessment.risk_level, 0) >= RISK_ORDER["HIGH"]
@@ -315,7 +381,7 @@ class OrchestrationService:
                 user_input=user_input,
                 planner_output=planner_output,
                 persona_name=persona_name,
-                limit=2,
+                limit=RAG_REFERENCE_LIMIT,
             )
         finally:
             db.close()
