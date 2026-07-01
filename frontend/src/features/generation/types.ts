@@ -9,13 +9,6 @@ export type PlannerOutput = {
   value_guidance?: string;
   persona_strategy?: string;
   response_focus?: string;
-  story_plan?: {
-    use_story?: boolean;
-    story_type?: string;
-    story_candidate?: string;
-    story_point?: string;
-    transfer_to_user?: string;
-  };
   action_strategy?: string[];
   sample_words?: string[];
   must_include?: string[];

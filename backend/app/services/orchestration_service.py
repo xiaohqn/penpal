@@ -230,6 +230,7 @@ class OrchestrationService:
     ) -> dict[str, Any]:
         normalized_persona = normalize_persona_name(persona_name)
         target = self._build_generator_targets(False, source_mode)[0]
+        planner_output = {key: value for key, value in planner_output.items() if key != "story_plan"}
         enriched_planner_output = self._attach_rag_references(
             user_input=user_input,
             persona_name=normalized_persona,
@@ -265,13 +266,17 @@ class OrchestrationService:
         normalized_persona = normalize_persona_name(persona_name)
         target = self._build_generator_targets(False, source_mode)[0]
         if target["mode"] == "mock":
-            revisions = [
-                {
-                    "id": str(annotation.get("id", "")),
-                    "revised_text": str(annotation.get("quote") or current_response[int(annotation.get("start", 0)): int(annotation.get("end", 0))]),
-                }
-                for annotation in annotations
-            ]
+            revisions = []
+            for annotation in annotations:
+                original_text = str(annotation.get("quote") or current_response[int(annotation.get("start", 0)): int(annotation.get("end", 0))])
+                note = str(annotation.get("note") or "").strip()
+                revised_text = original_text if not note else f"{original_text}\n\n[Mock 改写提示] {note}"
+                revisions.append(
+                    {
+                        "id": str(annotation.get("id", "")),
+                        "revised_text": revised_text,
+                    }
+                )
             return {"revisions": revisions}
 
         annotation_lines = []
@@ -292,7 +297,11 @@ class OrchestrationService:
                 "content": (
                     "你是专业的心理回信局部润色助手。你只改写专家批注指出的片段，"
                     "不要重写全文，不要输出未被批注的内容。保持原回信的人称、语气、称呼和上下文连贯。"
-                    "每个 revised_text 必须能直接替换原片段；不要加编号、解释、Markdown 或引号。"
+                    "专家批注是硬性修改要求，不是参考意见；必须逐条落实到 revised_text 里。"
+                    "除非批注明确要求“不改”，否则 revised_text 不得与原片段完全相同，也不得只替换一两个无关虚词。"
+                    "如果批注要求补充建议、缩短、增强共情、减少复述或改变语气，你必须让替换文本出现可见变化。"
+                    "每个 revised_text 必须能直接替换原片段；长度尽量贴近批注要求，不能把完整回信塞进一个片段。"
+                    "不要加编号、解释、Markdown 或引号。"
                     '只输出 JSON：{"revisions":[{"id":"批注 id","revised_text":"替换文本"}]}'
                 ),
             },
@@ -301,7 +310,9 @@ class OrchestrationService:
                 "content": (
                     f"【当前完整回信，仅供理解上下文】\n{current_response}\n\n"
                     f"【专家总体说明】\n{expert_annotation or '暂无'}\n\n"
-                    f"【需要局部改写的批注片段】\n{prompt}"
+                    f"【需要局部改写的批注片段】\n{prompt}\n\n"
+                    "请检查每条 revised_text：是否真正回应了对应专家批注；是否可以直接替换原片段；"
+                    "是否避免了原样返回。只返回最终 JSON。"
                 ),
             },
         ]

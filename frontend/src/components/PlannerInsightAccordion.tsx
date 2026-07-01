@@ -14,7 +14,8 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
   const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraftText(JSON.stringify(plannerOutput ?? {}, null, 2));
+    const nextPlanner = stripStoryPlan(plannerOutput ?? {});
+    setDraftText(JSON.stringify(nextPlanner, null, 2));
     setEditError(null);
   }, [plannerOutput]);
 
@@ -22,13 +23,14 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
     return null;
   }
 
-  const intention = plannerOutput.intention || plannerOutput.intent_analysis || "暂无";
-  const storyPlan = plannerOutput.story_plan;
-  const ragReferences = plannerOutput.rag_references ?? [];
+  const displayPlanner = stripStoryPlan(plannerOutput);
+  const intention = displayPlanner.intention || displayPlanner.intent_analysis || "暂无";
+  const ragReferences = displayPlanner.rag_references ?? [];
 
   function parseDraft() {
     try {
-      const parsed = JSON.parse(draftText) as PlannerOutput;
+      const parsed = stripStoryPlan(JSON.parse(draftText) as PlannerOutput);
+      setDraftText(JSON.stringify(parsed, null, 2));
       setEditError(null);
       return parsed;
     } catch {
@@ -62,7 +64,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
             <p className="text-sm uppercase tracking-[0.22em] text-moss">AI 思考过程</p>
             <h3 className="mt-1 font-serif text-2xl text-ink">查看 Planner 的核心判断与大纲</h3>
           </div>
-          <p className="text-sm text-ink/58">展开后可看到问题本质、写偏风险、故事策略和行动话术</p>
+          <p className="text-sm text-ink/58">展开后可看到问题本质、写偏风险和行动话术</p>
         </div>
       </summary>
       <div className="mt-5 grid gap-4 text-sm leading-7 text-ink/82 md:grid-cols-2">
@@ -72,68 +74,44 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">表层问题</p>
-          <p>{plannerOutput.surface_issue || "暂无"}</p>
+          <p>{displayPlanner.surface_issue || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">核心问题</p>
-          <p>{plannerOutput.core_issue || "暂无"}</p>
+          <p>{displayPlanner.core_issue || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">容易写偏</p>
-          <p>{plannerOutput.wrong_but_easy_answer || "暂无"}</p>
+          <p>{displayPlanner.wrong_but_easy_answer || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">正面动机</p>
-          <p>{plannerOutput.positive_motive || "暂无"}</p>
+          <p>{displayPlanner.positive_motive || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">价值观引导</p>
-          <p>{plannerOutput.value_guidance || "暂无"}</p>
+          <p>{displayPlanner.value_guidance || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">风险判断</p>
-          <p>{plannerOutput.risk_assessment || "暂无"}</p>
+          <p>{displayPlanner.risk_assessment || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">人格策略</p>
-          <p>{plannerOutput.persona_strategy || "暂无"}</p>
+          <p>{displayPlanner.persona_strategy || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">生成大纲</p>
-          <p>{plannerOutput.generation_plan || "暂无"}</p>
+          <p>{displayPlanner.generation_plan || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4 md:col-span-2">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-amber">回复重点</p>
-          <p>{plannerOutput.response_focus || "暂无"}</p>
-        </div>
-        <div className="rounded-[24px] border border-line bg-paper/70 p-4 md:col-span-2">
-          <p className="mb-3 text-xs uppercase tracking-[0.18em] text-amber">故事策略</p>
-          {storyPlan ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <p className="rounded-2xl bg-white/68 px-3 py-2">
-                是否讲故事：{storyPlan.use_story ? "是" : "否"}
-              </p>
-              <p className="rounded-2xl bg-white/68 px-3 py-2">
-                故事类型：{storyPlan.story_type || "暂无"}
-              </p>
-              <p className="rounded-2xl bg-white/68 px-3 py-2">
-                候选素材：{storyPlan.story_candidate || "暂无"}
-              </p>
-              <p className="rounded-2xl bg-white/68 px-3 py-2">
-                启发点：{storyPlan.story_point || "暂无"}
-              </p>
-              <p className="rounded-2xl bg-white/68 px-3 py-2">
-                迁移方式：{storyPlan.transfer_to_user || "暂无"}
-              </p>
-            </div>
-          ) : (
-            <p>暂无</p>
-          )}
+          <p>{displayPlanner.response_focus || "暂无"}</p>
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-3 text-xs uppercase tracking-[0.18em] text-amber">下一步</p>
           <ul className="grid gap-2">
-            {(plannerOutput.action_strategy ?? []).map((item) => (
+            {(displayPlanner.action_strategy ?? []).map((item) => (
               <li key={item} className="rounded-2xl bg-white/68 px-3 py-2">
                 {item}
               </li>
@@ -143,7 +121,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
         <div className="rounded-[24px] border border-line bg-paper/70 p-4">
           <p className="mb-3 text-xs uppercase tracking-[0.18em] text-amber">可用话术</p>
           <ul className="grid gap-2">
-            {(plannerOutput.sample_words ?? []).map((item) => (
+            {(displayPlanner.sample_words ?? []).map((item) => (
               <li key={item} className="rounded-2xl bg-white/68 px-3 py-2">
                 {item}
               </li>
@@ -152,7 +130,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
         </div>
         <div className="rounded-[24px] border border-line bg-paper/70 p-4 md:col-span-2">
           <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-xs uppercase tracking-[0.18em] text-amber">编辑 Planner</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-amber">编辑 Planner JSON</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -257,4 +235,9 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
       </div>
     </details>
   );
+}
+
+function stripStoryPlan(plannerOutput: PlannerOutput): PlannerOutput {
+  const { story_plan: _storyPlan, ...rest } = plannerOutput as PlannerOutput & { story_plan?: unknown };
+  return rest;
 }

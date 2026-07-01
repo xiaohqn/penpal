@@ -33,6 +33,7 @@ class PlannerService:
         if not parsed:
             raise ValueError("Planner did not return valid JSON")
 
+        parsed.pop("story_plan", None)
         parsed["raw"] = raw
         parsed["style_summary"] = style_summary
         return parsed
@@ -59,13 +60,6 @@ class PlannerService:
                 f"{style_summary['cognitive']}式认知介入。"
             ),
             "response_focus": "先看见来信者仍想把生活过好的正面动机，再把问题和自我价值分开，并收束到一个具体可尝试的小动作。",
-            "story_plan": {
-                "use_story": style_summary["narrative"] == "启发故事",
-                "story_type": "真实人物故事/学生近似案例" if style_summary["narrative"] == "启发故事" else "不讲故事",
-                "story_candidate": "选择一个能说明“暂时受挫不等于能力定型”的简短故事或类比" if style_summary["narrative"] == "启发故事" else "",
-                "story_point": "故事必须帮助来信者看到另一种处理方式，而不是复述同样的烦恼。",
-                "transfer_to_user": "把故事里的选择迁移成来信者当下可以尝试的一句话或一个动作。",
-            },
             "action_strategy": [
                 "先把最重的问题命名出来，而不是一次解决所有问题。",
                 "找到一个可信任的大人、老师或同伴，用一句话开启求助。",

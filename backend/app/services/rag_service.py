@@ -79,14 +79,6 @@ class RagService:
 
     def build_planner_labels(self, planner_output: dict[str, Any]) -> dict[str, Any]:
         labels = {field: planner_output.get(field, "") for field in LABEL_FIELDS if planner_output.get(field)}
-        story_plan = planner_output.get("story_plan")
-        if isinstance(story_plan, dict):
-            labels["story_plan"] = {
-                "use_story": story_plan.get("use_story", False),
-                "story_type": story_plan.get("story_type", ""),
-                "story_candidate": story_plan.get("story_candidate", ""),
-                "story_point": story_plan.get("story_point", ""),
-            }
         action_strategy = planner_output.get("action_strategy")
         if isinstance(action_strategy, list):
             labels["action_strategy"] = [str(item) for item in action_strategy[:4]]

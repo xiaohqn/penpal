@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { GitBranchPlus, RotateCcw } from "lucide-react";
+import { GitBranchPlus } from "lucide-react";
 
 import type { ResponseVersion } from "../features/records/types";
 
@@ -92,8 +92,7 @@ export function ResponseVersionPanel({
                       disabled={isActive}
                       className="inline-flex items-center gap-2 rounded-full border border-line bg-white/75 px-4 py-2 text-sm text-ink transition hover:bg-paper/78 disabled:cursor-not-allowed disabled:opacity-45"
                     >
-                      <RotateCcw size={15} />
-                      回退到此版本
+                      回退
                     </button>
                   </div>
                 </div>
