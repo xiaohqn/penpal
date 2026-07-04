@@ -136,8 +136,7 @@ export function AssignedLettersPage() {
         planner_output: {
           intention: "咨询师人工回信辅助起草",
           risk_assessment: latestUserRisk(selected)?.reasoning ?? "",
-          response_focus: "基于完整书信上下文和风险提示，生成一封供咨询师审阅修改后发送的回信。",
-          must_avoid: ["不要声称自己是 AI", "不要替代医疗诊断", "不要提供危险行为方法"],
+          generation_plan: "基于完整书信上下文和风险提示，生成一封供咨询师审阅修改后发送的回信。",
         },
         source_mode: "api",
       });

@@ -336,9 +336,16 @@ export function ResponseEvaluationPanel({ value, onChange, defaultOpen = false }
             </section>
           );
         })}
-        <section className="rounded-[22px] border border-line bg-white/76 p-4">
-          <div className="flex flex-col gap-3">
-            <p className="text-sm font-semibold text-ink">安全识别</p>
+        <details className="rounded-[22px] border border-line bg-white/76 p-4">
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-semibold text-ink">安全识别</p>
+              <p className="text-xs text-ink/50">
+                {safetyCompletedCount ? `已完成 ${safetyCompletedCount}/3，点击展开修改` : "点击展开填写"}
+              </p>
+            </div>
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
             {SAFETY_CHECKS.map((check) => {
               const selected = normalized.safety_checks?.[check.key];
               return (
@@ -377,7 +384,7 @@ export function ResponseEvaluationPanel({ value, onChange, defaultOpen = false }
               );
             })}
           </div>
-        </section>
+        </details>
       </div>
     </details>
   );

@@ -97,6 +97,17 @@ export type SaveRecordPayload = {
   batch_item_id?: number | null;
 };
 
+export type UpdateRecordPayload = {
+  user_input?: string;
+  expert_polished_response?: string;
+  expert_annotation?: string;
+  rag_ready?: string;
+  sample_reason?: string;
+  sample_tags?: Record<string, unknown>;
+  planner_labels?: Record<string, unknown>;
+  evaluation?: Record<string, unknown>;
+};
+
 export type BatchExcelItem = {
   id?: number;
   session_id?: number;
@@ -277,4 +288,5 @@ export type BatchSessionItemRegeneratePayload = {
   expert_annotation: string;
   current_response: string;
   planner_output?: Record<string, unknown>;
+  use_deep_thinking?: boolean;
 };

@@ -271,7 +271,7 @@ class MailThreadService:
             "intention": "用户对 AI 回信满意后主动选择入库",
             "core_issue": self._compact(latest_user.content, 120),
             "risk_assessment": latest_risk.reasoning if latest_risk is not None else "",
-            "response_focus": "用户认可这封 AI 回信对其来信有帮助，作为后续 RAG 参考样本。",
+            "generation_plan": "用户认可这封 AI 回信对其来信有帮助，作为后续 RAG 参考样本。",
             "style_summary": {"persona_name": persona_name},
         }
         existing_record = self._find_user_satisfied_record(
@@ -545,6 +545,7 @@ class MailThreadService:
             persona_names=[persona_name],
             compare_sources=False,
             source_mode="auto",
+            audience="user",
         )
         if not drafts:
             raise ValueError("AI 暂时没有生成回信，请稍后再试")

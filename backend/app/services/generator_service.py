@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 import re
 
 from app.adapters.llm_client import LLMClient
@@ -34,6 +35,8 @@ class GeneratorService:
         planner_output: dict[str, object],
         persona_name: str,
         mode: str,
+        audience: str = "counselor",
+        use_deep_thinking: bool = False,
     ) -> dict[str, str]:
         persona_name = normalize_persona_name(persona_name)
         style_summary = build_style_summary(persona_name)
@@ -80,19 +83,80 @@ class GeneratorService:
         else:
             raw = await self.llm_client.complete_api(
                 provider="doubao",
-                model=self.settings.generator_model,
+                model=self._resolve_api_model(audience),
                 messages=generator_messages,
                 temperature=0.55,
                 timeout=self.settings.generator_timeout_seconds,
+                extra_body=self._resolve_extra_body(audience, use_deep_thinking),
             )
         response, _ = parse_response_only(raw)
         return {"raw": raw, "response": self._normalize_letter_format(response)}
+
+    async def stream_with_mode(
+        self,
+        user_input: str,
+        planner_output: dict[str, object],
+        persona_name: str,
+        mode: str,
+        audience: str = "counselor",
+        use_deep_thinking: bool = False,
+    ) -> AsyncIterator[str]:
+        persona_name = normalize_persona_name(persona_name)
+        style_summary = build_style_summary(persona_name)
+        generator_messages = [
+            {
+                "role": "system",
+                "content": build_generator_system_prompt(planner_output, style_summary, output_format="plain"),
+            },
+            {
+                "role": "user",
+                "content": f"以下是用户来信，请根据 Planner 的计划写出最终回信：\n\n{user_input}",
+            },
+        ]
+
+        if mode == "vllm":
+            if not self.settings.vllm_model_name:
+                raise ValueError("VLLM_MODEL_NAME is not configured")
+            async for chunk in self.llm_client.stream_api(
+                provider="vllm",
+                model=self.settings.vllm_model_name,
+                messages=generator_messages,
+                temperature=0.55,
+                timeout=self.settings.generator_timeout_seconds,
+            ):
+                yield chunk
+            return
+
+        if mode == "api":
+            async for chunk in self.llm_client.stream_api(
+                provider="doubao",
+                model=self._resolve_api_model(audience),
+                messages=generator_messages,
+                temperature=0.55,
+                timeout=self.settings.generator_timeout_seconds,
+                extra_body=self._resolve_extra_body(audience, use_deep_thinking),
+            ):
+                yield chunk
+            return
+
+        result = await self.generate_with_mode(
+            user_input=user_input,
+            planner_output=planner_output,
+            persona_name=persona_name,
+            mode=mode,
+            audience=audience,
+            use_deep_thinking=use_deep_thinking,
+        )
+        async for chunk in self.emit_chunks(result["response"]):
+            yield chunk
 
     async def generate_raw_with_mode(
         self,
         messages: list[dict[str, str]],
         mode: str,
         temperature: float = 0.55,
+        audience: str = "counselor",
+        use_deep_thinking: bool = False,
     ) -> str:
         if mode == "local":
             local_model_path = self.settings.resolve_local_generator_model_path()
@@ -116,11 +180,24 @@ class GeneratorService:
             )
         return await self.llm_client.complete_api(
             provider="doubao",
-            model=self.settings.generator_model,
+            model=self._resolve_api_model(audience),
             messages=messages,
             temperature=temperature,
             timeout=self.settings.generator_timeout_seconds,
+            extra_body=self._resolve_extra_body(audience, use_deep_thinking),
         )
+
+    def _resolve_api_model(self, audience: str) -> str:
+        if audience == "user":
+            return self.settings.effective_user_generator_model
+        return self.settings.effective_counselor_generator_model
+
+    def _resolve_extra_body(self, audience: str, use_deep_thinking: bool) -> dict[str, object]:
+        if audience == "user":
+            return self.settings.effective_user_generator_extra_body
+        if use_deep_thinking:
+            return {}
+        return self.settings.effective_counselor_generator_extra_body
 
     def split_text(self, text: str) -> list[str]:
         chunk_size = max(1, self.settings.stream_chunk_size)

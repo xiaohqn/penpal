@@ -19,7 +19,7 @@ export function useGenerationWorkspace() {
   const [jobError, setJobError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (payload: { user_input: string; persona_names: string[]; compare_sources?: boolean; source_mode?: string }) => {
+    mutationFn: async (payload: { user_input: string; persona_names: string[]; compare_sources?: boolean; source_mode?: string; use_deep_thinking?: boolean }) => {
       setJobLoading(true);
       setJobError(null);
       setDrafts({});
@@ -155,6 +155,7 @@ export function useGenerationWorkspace() {
       persona_name: string;
       planner_output: PlannerOutput;
       source_mode?: string;
+      use_deep_thinking?: boolean;
     }) => {
       setJobLoading(true);
       setJobError(null);
@@ -184,6 +185,7 @@ export function useGenerationWorkspace() {
       expert_annotation: string;
       persona_name: string;
       source_mode?: string;
+      use_deep_thinking?: boolean;
     }) => {
       setJobLoading(true);
       setJobError(null);

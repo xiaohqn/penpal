@@ -36,6 +36,7 @@ async def stream_generation(
             persona_names=payload.persona_names,
             compare_sources=payload.compare_sources,
             source_mode=payload.source_mode,
+            use_deep_thinking=payload.use_deep_thinking,
         ),
         media_type="text/event-stream",
         headers=headers,
@@ -52,6 +53,7 @@ async def generate_from_plan(
         persona_name=payload.persona_name,
         planner_output=payload.planner_output,
         source_mode=payload.source_mode,
+        use_deep_thinking=payload.use_deep_thinking,
     )
 
 
@@ -66,4 +68,5 @@ async def rewrite_annotations(
         expert_annotation=payload.expert_annotation,
         persona_name=payload.persona_name,
         source_mode=payload.source_mode,
+        use_deep_thinking=payload.use_deep_thinking,
     )

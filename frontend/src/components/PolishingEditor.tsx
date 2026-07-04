@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { Highlighter, Plus } from "lucide-react";
 
 import type { SourceAnnotation } from "../features/records/types";
@@ -10,17 +9,7 @@ type Props = {
   annotations?: SourceAnnotation[];
   onAddAnnotation?: ((annotation: SourceAnnotation) => void) | null;
   onRemoveAnnotation?: ((annotationId: string) => void) | null;
-  sidePanel?: ReactNode;
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export function PolishingEditor({
   value,
@@ -28,31 +17,9 @@ export function PolishingEditor({
   annotations = [],
   onAddAnnotation = null,
   onRemoveAnnotation = null,
-  sidePanel = null,
 }: Props) {
   const [annotationNote, setAnnotationNote] = useState("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; quote: string } | null>(null);
-
-  const highlightedPreview = useMemo(() => {
-    if (!annotations.length || !value) {
-      return escapeHtml(value).replace(/\n/g, "<br />");
-    }
-
-    const sorted = [...annotations].sort((a, b) => a.start - b.start);
-    let cursor = 0;
-    let html = "";
-
-    for (const annotation of sorted) {
-      const start = Math.max(0, Math.min(annotation.start, value.length));
-      const end = Math.max(start, Math.min(annotation.end, value.length));
-      html += escapeHtml(value.slice(cursor, start)).replace(/\n/g, "<br />");
-      html += `<mark class="rounded bg-[rgba(79,110,140,0.22)] px-1">${escapeHtml(value.slice(start, end))}</mark>`;
-      cursor = end;
-    }
-
-    html += escapeHtml(value.slice(cursor)).replace(/\n/g, "<br />");
-    return html;
-  }, [annotations, value]);
 
   function handleSelection(event: React.SyntheticEvent<HTMLTextAreaElement>) {
     const target = event.currentTarget;
@@ -86,21 +53,18 @@ export function PolishingEditor({
       <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-amber">回信编辑</p>
-          <h2 className="mt-1 font-serif text-2xl text-ink">专家润色区</h2>
+          <h2 className="mt-1 font-serif text-2xl text-ink">AI 原稿与专家润色区</h2>
         </div>
         <p className="text-sm text-ink/58">选中文字可添加批注并重生成</p>
       </div>
 
-      <div className={`grid gap-4 ${sidePanel ? "xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]" : ""}`}>
-        <textarea
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onSelect={handleSelection}
-          placeholder="选择一个草稿后，这里会自动带入内容，供继续润色。"
-          className="min-h-[520px] w-full rounded-[20px] border border-transparent bg-paper/72 px-5 py-4 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
-        />
-        {sidePanel ? <div className="xl:sticky xl:top-6 xl:self-start">{sidePanel}</div> : null}
-      </div>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onSelect={handleSelection}
+        placeholder="生成草稿后，这里会自动带入内容，供继续润色。"
+        className="min-h-[520px] w-full rounded-[20px] border border-transparent bg-paper/72 px-5 py-4 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
+      />
 
       <section className="mt-4 rounded-[20px] border border-line bg-paper/68 p-4">
         <details open={Boolean(selectionRange || annotations.length)}>
@@ -174,20 +138,6 @@ export function PolishingEditor({
             </div>
           ) : null}
 
-          <details className="mt-4 rounded-[18px] border border-line bg-white/82 p-4">
-            <summary className="cursor-pointer list-none">
-              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                <p className="text-xs uppercase tracking-[0.16em] text-ink/42">高亮预览</p>
-                <p className="text-xs text-ink/50">
-                  {annotations.length > 0 ? "点击展开查看" : "暂无批注"}
-                </p>
-              </div>
-            </summary>
-            <div
-              className="mt-3 max-h-[240px] overflow-y-auto whitespace-pre-wrap text-sm leading-8 text-ink"
-              dangerouslySetInnerHTML={{ __html: highlightedPreview || "暂无高亮批注。" }}
-            />
-          </details>
         </details>
       </section>
     </section>

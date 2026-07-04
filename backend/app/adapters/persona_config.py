@@ -44,7 +44,7 @@ PERSONAS: dict[str, dict[str, str]] = {
         "empathy_ratio": "15%-20%",
         "analysis_ratio": "40%-45%",
         "action_ratio": "30%-35%",
-        "target_length": "900-1150字之间",
+        "target_length": "800-950字之间",
     },
     "启发故事导师": {
         "narrative": "启发故事",

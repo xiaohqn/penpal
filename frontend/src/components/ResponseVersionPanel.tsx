@@ -100,9 +100,9 @@ export function ResponseVersionPanel({
             })}
         </div>
       ) : (
-        <div className="mt-4 rounded-[18px] border border-dashed border-line bg-paper/68 px-4 py-4 text-sm leading-7 text-ink/62">
-          暂无版本历史。
-        </div>
+        <p className="mt-3 text-xs leading-6 text-ink/48">
+          暂无版本历史。选中左侧文本并添加批注后，可点击上方按钮局部应用批注。
+        </p>
       )}
     </section>
   );

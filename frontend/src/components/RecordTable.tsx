@@ -14,7 +14,6 @@ export function RecordTable({ items, selectedId, onSelect }: Props) {
           <tr>
             <th className="px-4 py-3">ID</th>
             <th className="px-4 py-3">咨询师</th>
-            <th className="px-4 py-3">风格</th>
             <th className="px-4 py-3">沉淀状态</th>
             <th className="px-4 py-3">来信摘要</th>
             <th className="px-4 py-3">创建时间</th>
@@ -29,7 +28,6 @@ export function RecordTable({ items, selectedId, onSelect }: Props) {
             >
               <td className="px-4 py-4 text-sm">{item.id}</td>
               <td className="px-4 py-4 text-sm text-ink/70">{item.counselor_id}</td>
-              <td className="px-4 py-4 text-sm">{item.selected_persona_name}</td>
               <td className="px-4 py-4 text-sm">
                 {item.rag_ready === "approved" ? "已记录" : "待补批注"}
               </td>

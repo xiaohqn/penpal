@@ -1,7 +1,7 @@
 from functools import lru_cache
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     planner_model: str = "gpt-4o-mini"
     generator_model: str = "doubao-1-5-pro-32k-250115"
+    counselor_generator_model: str = ""
+    user_generator_model: str = ""
     planner_timeout_seconds: int = 90
     generator_timeout_seconds: int = 180
     planner_mode: Literal["auto", "mock", "api"] = "auto"
@@ -55,6 +57,10 @@ class Settings(BaseSettings):
     mock_llm: bool = True
     stream_chunk_size: int = 28
     stream_chunk_delay_ms: int = 15
+    generator_extra_body: dict[str, Any] = Field(default_factory=dict)
+    counselor_generator_extra_body: dict[str, Any] = Field(default_factory=dict)
+    user_generator_extra_body: dict[str, Any] = Field(default_factory=dict)
+    rag_enabled: bool = True
     rag_seed_path: str = str(DEFAULT_RAG_SEED_PATH)
     rag_seed_enabled: bool = True
     counselor_features_enabled: bool = True
@@ -79,6 +85,34 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("generator_extra_body", "counselor_generator_extra_body", "user_generator_extra_body", mode="before")
+    @classmethod
+    def parse_generator_extra_body(cls, value: str | dict[str, Any] | None) -> dict[str, Any]:
+        if value is None or value == "":
+            return {}
+        if isinstance(value, str):
+            parsed = json.loads(value)
+            if not isinstance(parsed, dict):
+                raise ValueError("GENERATOR_EXTRA_BODY must be a JSON object")
+            return parsed
+        return value
+
+    @property
+    def effective_counselor_generator_model(self) -> str:
+        return self.counselor_generator_model or self.generator_model
+
+    @property
+    def effective_user_generator_model(self) -> str:
+        return self.user_generator_model or self.generator_model
+
+    @property
+    def effective_counselor_generator_extra_body(self) -> dict[str, Any]:
+        return self.counselor_generator_extra_body or self.generator_extra_body
+
+    @property
+    def effective_user_generator_extra_body(self) -> dict[str, Any]:
+        return self.user_generator_extra_body or self.generator_extra_body
 
     @property
     def effective_planner_mode(self) -> Literal["mock", "api"]:

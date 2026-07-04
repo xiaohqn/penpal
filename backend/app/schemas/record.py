@@ -75,6 +75,42 @@ class ConsultationRecordResponse(BaseModel):
     updated_at: datetime
 
 
+class ConsultationRecordUpdateRequest(BaseModel):
+    user_input: str | None = None
+    expert_polished_response: str | None = None
+    expert_annotation: str | None = None
+    rag_ready: str | None = None
+    sample_reason: str | None = None
+    sample_tags: dict[str, Any] | None = None
+    planner_labels: dict[str, Any] | None = None
+    evaluation: dict[str, Any] | None = None
+
+    @field_validator("user_input", "expert_polished_response")
+    @classmethod
+    def strip_optional_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("field cannot be empty")
+        return cleaned
+
+    @field_validator("expert_annotation", "sample_reason")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("rag_ready")
+    @classmethod
+    def validate_optional_rag_ready(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in {"pending", "approved", "rejected"}:
+            raise ValueError("rag_ready must be one of: pending, approved, rejected")
+        return normalized
+
+
 class ConsultationRecordListItem(BaseModel):
     id: int
     counselor_id: str
@@ -259,6 +295,7 @@ class BatchSessionItemRegenerateRequest(BaseModel):
     expert_annotation: str = ""
     current_response: str = ""
     planner_output: dict[str, Any] = Field(default_factory=dict)
+    use_deep_thinking: bool = False
 
 
 class BatchSessionItemRollbackRequest(BaseModel):

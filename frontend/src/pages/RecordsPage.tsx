@@ -6,7 +6,8 @@ import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { RecordDetailDrawer } from "../components/RecordDetailDrawer";
 import { RecordTable } from "../components/RecordTable";
 import scirScLogo from "../assets/logo-mark.png";
-import { useExportRecordsExcel, useRecord, useRecords } from "../features/records/hooks";
+import { useExportRecordsExcel, useRecord, useRecords, useUpdateRecord } from "../features/records/hooks";
+import type { UpdateRecordPayload } from "../features/records/types";
 
 export function RecordsPage() {
   const { user, logout } = useAuth();
@@ -17,6 +18,7 @@ export function RecordsPage() {
   const recordsQuery = useRecords(page, 20, scope);
   const recordQuery = useRecord(selectedId, scope);
   const exportRecords = useExportRecordsExcel();
+  const updateRecord = useUpdateRecord();
   const total = recordsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 20));
 
@@ -28,6 +30,10 @@ export function RecordsPage() {
     anchor.download = "consultation_records.xlsx";
     anchor.click();
     window.URL.revokeObjectURL(url);
+  }
+
+  async function handleUpdateRecord(recordId: number, payload: UpdateRecordPayload) {
+    await updateRecord.mutateAsync({ recordId, payload, scope });
   }
 
   return (
@@ -106,8 +112,8 @@ export function RecordsPage() {
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <section>
+        <div className="grid gap-6 xl:grid-cols-[minmax(520px,0.82fr)_minmax(620px,1.18fr)]">
+          <section className="min-w-0">
             {recordsQuery.isLoading ? (
               <LoadingSkeleton />
             ) : (
@@ -149,8 +155,12 @@ export function RecordsPage() {
               </div>
             )}
           </section>
-          <section>
-            <RecordDetailDrawer record={recordQuery.data} />
+          <section className="min-w-0">
+            <RecordDetailDrawer
+              record={recordQuery.data}
+              onSave={handleUpdateRecord}
+              saving={updateRecord.isPending}
+            />
           </section>
         </div>
       </div>

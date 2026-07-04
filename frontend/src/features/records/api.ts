@@ -12,6 +12,7 @@ import type {
   RecordListResponse,
   ReviewedBatchItem,
   SaveRecordPayload,
+  UpdateRecordPayload,
 } from "./types";
 
 export function fetchRecords(page = 1, pageSize = 10, scope: "mine" | "all" = "mine") {
@@ -25,6 +26,13 @@ export function fetchRecord(recordId: number, scope: "mine" | "all" = "mine") {
 export function saveRecord(payload: SaveRecordPayload) {
   return request<RecordDetail>("/records", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRecord(recordId: number, payload: UpdateRecordPayload, scope: "mine" | "all" = "mine") {
+  return request<RecordDetail>(`/records/${recordId}?scope=${scope}`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }

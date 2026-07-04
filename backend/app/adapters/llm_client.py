@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -53,6 +53,7 @@ class LLMClient:
         messages: Sequence[dict[str, str]],
         temperature: float,
         timeout: int = 60,
+        extra_body: dict[str, Any] | None = None,
     ) -> str:
         if provider == "gpt":
             client = self._planner_client
@@ -69,11 +70,46 @@ class LLMClient:
                 messages=list(messages),
                 temperature=temperature,
                 timeout=timeout,
+                extra_body=extra_body or None,
             )
         except Exception as exc:  # pragma: no cover - depends on network/provider
             raise LLMClientError(f"{provider} completion failed: {exc}") from exc
 
         return response.choices[0].message.content or ""
+
+    async def stream_api(
+        self,
+        provider: str,
+        model: str,
+        messages: Sequence[dict[str, str]],
+        temperature: float,
+        timeout: int = 60,
+        extra_body: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str]:
+        if provider == "gpt":
+            client = self._planner_client
+        elif provider == "vllm":
+            client = self._vllm_client
+        else:
+            client = self._generator_client
+        if client is None:
+            raise LLMClientError(f"Provider {provider} is not configured")
+
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=list(messages),
+                temperature=temperature,
+                timeout=timeout,
+                stream=True,
+                extra_body=extra_body or None,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    yield delta
+        except Exception as exc:  # pragma: no cover - depends on network/provider
+            raise LLMClientError(f"{provider} stream failed: {exc}") from exc
 
     async def complete_local(
         self,

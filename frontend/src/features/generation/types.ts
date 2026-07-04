@@ -1,18 +1,10 @@
 export type PlannerOutput = {
   intention?: string;
   intent_analysis?: string;
-  surface_issue?: string;
   core_issue?: string;
-  positive_motive?: string;
   wrong_but_easy_answer?: string;
   risk_assessment?: string;
   value_guidance?: string;
-  persona_strategy?: string;
-  response_focus?: string;
-  action_strategy?: string[];
-  sample_words?: string[];
-  must_include?: string[];
-  must_avoid?: string[];
   generation_plan?: string;
   rag_references?: RagReference[];
   style_summary?: Record<string, string>;
@@ -28,6 +20,9 @@ export type RagReference = {
   user_input_excerpt?: string;
   expert_response_excerpt?: string;
   expert_annotation?: string;
+  user_input_full?: string;
+  expert_response_full?: string;
+  expert_annotation_full?: string;
 };
 
 export type DraftCandidate = {

@@ -12,6 +12,7 @@ import {
   regenerateBatchSessionItem,
   rollbackBatchSessionItem,
   saveRecord,
+  updateRecord,
   updateBatchSessionItem,
 } from "./api";
 import type {
@@ -20,6 +21,7 @@ import type {
   BatchSessionItemUpdatePayload,
   ReviewedBatchItem,
   SaveRecordPayload,
+  UpdateRecordPayload,
 } from "./types";
 
 export function useRecords(page = 1, pageSize = 10, scope: "mine" | "all" = "mine") {
@@ -43,6 +45,25 @@ export function useSaveRecord() {
     mutationFn: (payload: SaveRecordPayload) => saveRecord(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["records"] });
+    },
+  });
+}
+
+export function useUpdateRecord() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      recordId,
+      payload,
+      scope,
+    }: {
+      recordId: number;
+      payload: UpdateRecordPayload;
+      scope: "mine" | "all";
+    }) => updateRecord(recordId, payload, scope),
+    onSuccess: (data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["records"] });
+      void queryClient.setQueryData(["record", variables.recordId, variables.scope], data);
     },
   });
 }

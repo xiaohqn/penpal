@@ -1,10 +1,9 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { LogOut, ScrollText, Sparkles } from "lucide-react";
+import { LogOut, PanelRightClose, PanelRightOpen, ScrollText, Sparkles } from "lucide-react";
 
 import { useAuth } from "../app/auth";
 import { BatchExcelPanel } from "../components/BatchExcelPanel";
-import { DraftStreamTabs } from "../components/DraftStreamTabs";
 import { ExpertAnnotationPanel } from "../components/ExpertAnnotationPanel";
 import { MailThreadContextPanel } from "../components/MailThreadContextPanel";
 import { PlannerInsightAccordion } from "../components/PlannerInsightAccordion";
@@ -43,6 +42,7 @@ import type {
 } from "../features/records/types";
 
 type WorkspaceMode = "single" | "excel_batch" | "mail_batch";
+type RightPanelTab = "planner" | "revision" | "evaluation" | "batch";
 type WorkspaceBatchItem = ReturnType<typeof mapBatchSessionItem>;
 const DEFAULT_PERSONA_NAME = "理性破局教练";
 const PERSONA_DISPLAY_NAMES: Record<string, string> = {
@@ -284,6 +284,9 @@ export function WorkspacePage() {
   const [responseVersions, setResponseVersions] = useState<ResponseVersion[]>([]);
   const [responseEvaluation, setResponseEvaluation] = useState<ResponseEvaluation>(EMPTY_EVALUATION);
   const [activeVersionIndex, setActiveVersionIndex] = useState(0);
+  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("planner");
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [useDeepThinking, setUseDeepThinking] = useState(false);
   const [lastHydratedDraft, setLastHydratedDraft] = useState<{
     personaName: string | null;
     response: string;
@@ -304,6 +307,12 @@ export function WorkspacePage() {
   const batchCompletedCount = visibleBatchItems.filter((item) => item.status === "completed").length;
   const batchAllCompleted = visibleBatchItems.length > 0 && batchCompletedCount === visibleBatchItems.length;
   const completedRowNumbers = visibleBatchItems.filter((item) => item.status === "completed").map((item) => item.row_number);
+  const rightPanelTabs = [
+    { key: "planner" as const, label: "核心判断" },
+    { key: "revision" as const, label: "批注修订" },
+    { key: "evaluation" as const, label: "AI 评价" },
+    ...(isWorkspaceBatchMode ? [{ key: "batch" as const, label: "批量进度" }] : []),
+  ];
   const reviewedBatchItems = buildReviewedItems(visibleBatchItems);
   const generationBusy = jobLoading || regenerateBatchSessionItem.isPending;
   const legacySplit = currentBatchItem ? splitLegacyMailThreadInput(currentBatchItem.user_input) : null;
@@ -311,6 +320,13 @@ export function WorkspacePage() {
     currentBatchItem && isMailThreadContext(currentBatchItem.context_json)
       ? currentBatchItem.context_json
       : legacySplit?.context ?? null;
+
+  useEffect(() => {
+    if (!isWorkspaceBatchMode && activeRightTab === "batch") {
+      setActiveRightTab("planner");
+    }
+  }, [activeRightTab, isWorkspaceBatchMode]);
+
   useEffect(() => {
     if (routeState?.batchSessionId) {
       setActiveSessionId(routeState.batchSessionId);
@@ -483,6 +499,7 @@ export function WorkspacePage() {
       persona_names: selectedPersonas,
       compare_sources: false,
       source_mode: "auto",
+      use_deep_thinking: useDeepThinking,
     });
   }
 
@@ -687,6 +704,7 @@ export function WorkspacePage() {
         expert_annotation: expertAnnotation,
         persona_name: activeDraft.persona_name,
         source_mode: "auto",
+        use_deep_thinking: useDeepThinking,
       });
       const rewrittenText = applyAnnotationRevisions(polishedText, sourceAnnotations, rewriteResult.revisions);
       const existingVersions =
@@ -788,6 +806,7 @@ export function WorkspacePage() {
           persona_name: activeDraft.persona_name,
           planner_output: plannerOutput,
           source_mode: "auto",
+          use_deep_thinking: useDeepThinking,
         });
         appendPlannerRegeneratedVersion(selectedDraft, plannerOutput);
         setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
@@ -804,6 +823,7 @@ export function WorkspacePage() {
           expert_annotation: expertAnnotation,
           current_response: polishedText,
           planner_output: plannerOutput,
+          use_deep_thinking: useDeepThinking,
         },
       });
       const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
@@ -953,6 +973,17 @@ export function WorkspacePage() {
               </div>
               <button
                 type="button"
+                onClick={() => setUseDeepThinking((current) => !current)}
+                className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm transition ${
+                  useDeepThinking
+                    ? "border-amber bg-amber/12 text-ink shadow-card"
+                    : "border-line bg-white/70 text-ink/70 hover:bg-paper/85"
+                }`}
+              >
+                深度思考：{useDeepThinking ? "开" : "关"}
+              </button>
+              <button
+                type="button"
                 onClick={handleGenerate}
                 disabled={jobLoading || selectedPersonas.length === 0 || !userInput.trim()}
                 className="lilac-gradient inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-white shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
@@ -998,7 +1029,11 @@ export function WorkspacePage() {
           }
         />
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div
+          className={`mt-4 grid gap-4 ${
+            rightPanelCollapsed ? "xl:grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_430px] 2xl:grid-cols-[minmax(0,1fr)_470px]"
+          }`}
+        >
           <div className="grid gap-4">
             {statusText ? (
               <div className="rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm leading-7 text-moss shadow-card">
@@ -1006,90 +1041,148 @@ export function WorkspacePage() {
               </div>
             ) : null}
             {jobError ? <p className="text-sm text-red-600">{jobError}</p> : null}
+            {activeDraft?.error ? <p className="text-sm text-red-600">{activeDraft.error}</p> : null}
 
-            <DraftStreamTabs
-              drafts={drafts}
-              selectedPersona={selectedPersona}
-              onSelect={setSelectedPersona}
-              displayName={getPersonaDisplayName}
+            <div className="flex justify-end xl:hidden">
+              <button
+                type="button"
+                onClick={() => setRightPanelCollapsed((current) => !current)}
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-white/76 px-4 py-2 text-sm text-ink transition hover:bg-paper/85"
+              >
+                {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+                {rightPanelCollapsed ? "展开右侧面板" : "收起右侧面板"}
+              </button>
+            </div>
+
+            <PolishingEditor
+              value={polishedText}
+              onChange={setPolishedText}
+              annotations={sourceAnnotations}
+              onAddAnnotation={handleAddSourceAnnotation}
+              onRemoveAnnotation={handleRemoveSourceAnnotation}
             />
-
-            <section className="grid gap-4 rounded-[22px] border border-line bg-white/76 p-4 shadow-soft md:p-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <h2 className="font-serif text-2xl text-ink">
-                  {getPersonaDisplayName(activeDraft?.persona_name ?? currentBatchItem?.selected_persona_name ?? DEFAULT_PERSONA_NAME)}
-                </h2>
-                <div className="rounded-full border border-line bg-paper/75 px-3 py-1.5 text-sm text-ink/72">
-                  生成草稿 → 润色回信 → 保存
-                </div>
-              </div>
-              <PolishingEditor
-                value={polishedText}
-                onChange={setPolishedText}
-                annotations={sourceAnnotations}
-                onAddAnnotation={handleAddSourceAnnotation}
-                onRemoveAnnotation={handleRemoveSourceAnnotation}
-              />
-            </section>
           </div>
 
-          <aside className="grid gap-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
-            <MailThreadContextPanel context={currentWorkspaceContext} />
+          {!rightPanelCollapsed ? (
+            <aside className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start">
+              <section className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[24px] border border-line bg-white/78 shadow-card">
+                <div className="border-b border-line bg-paper/72 px-4 py-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-moss">工作侧栏</p>
+                      <h2 className="mt-1 font-serif text-xl text-ink">处理信息</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelCollapsed(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-line bg-white/76 px-3 py-2 text-xs text-ink transition hover:bg-white"
+                    >
+                      <PanelRightClose size={15} />
+                      收起
+                    </button>
+                  </div>
+                  <div
+                    className={`grid gap-1 rounded-full border border-line bg-white/70 p-1 text-xs ${
+                      rightPanelTabs.length === 4 ? "grid-cols-4" : "grid-cols-3"
+                    }`}
+                  >
+                    {rightPanelTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setActiveRightTab(tab.key)}
+                        className={`rounded-full px-3 py-2 font-medium transition ${
+                          activeRightTab === tab.key ? "bg-amber text-white shadow-card" : "text-ink/62 hover:bg-paper/75"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <PlannerInsightAccordion
-              plannerOutput={activeDraft?.planner_output}
-              onChange={handlePlannerChange}
-              onRegenerate={handleRegenerateFromPlanner}
-              regenerating={generationBusy}
-            />
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                  {activeRightTab === "planner" ? (
+                    <div className="grid gap-3">
+                      <MailThreadContextPanel context={currentWorkspaceContext} />
+                      <PlannerInsightAccordion
+                        plannerOutput={activeDraft?.planner_output}
+                        onChange={handlePlannerChange}
+                        onRegenerate={handleRegenerateFromPlanner}
+                        regenerating={generationBusy}
+                      />
+                    </div>
+                  ) : null}
 
-            <ExpertAnnotationPanel
-              value={expertAnnotation}
-              onChange={setExpertAnnotation}
-            />
+                  {activeRightTab === "revision" ? (
+                    <div className="grid gap-3">
+                      <ExpertAnnotationPanel
+                        value={expertAnnotation}
+                        onChange={setExpertAnnotation}
+                      />
+                      <ResponseVersionPanel
+                        versions={responseVersions}
+                        activeVersionIndex={activeVersionIndex}
+                        canRegenerate={Boolean(selectedPersona && sourceAnnotations.length > 0)}
+                        regenerating={generationBusy}
+                        onRegenerate={handleRegenerateFromAnnotations}
+                        onRollback={handleRollbackVersion}
+                      />
+                    </div>
+                  ) : null}
 
-            <ResponseEvaluationPanel
-              value={responseEvaluation}
-              onChange={setResponseEvaluation}
-            />
+                  {activeRightTab === "evaluation" ? (
+                    <ResponseEvaluationPanel
+                      value={responseEvaluation}
+                      onChange={setResponseEvaluation}
+                      defaultOpen
+                    />
+                  ) : null}
 
-            <ResponseVersionPanel
-              versions={responseVersions}
-              activeVersionIndex={activeVersionIndex}
-              canRegenerate={Boolean(selectedPersona && sourceAnnotations.length > 0)}
-              regenerating={generationBusy}
-              onRegenerate={handleRegenerateFromAnnotations}
-              onRollback={handleRollbackVersion}
-            />
+                  {activeRightTab === "batch" && isWorkspaceBatchMode ? (
+                    <div>
+                      <BatchExcelPanel
+                        importing={importBatchExcel.isPending || batchSessions.isLoading}
+                        fileName={batchFileName}
+                        items={visibleBatchItems}
+                        completedCount={batchCompletedCount}
+                        currentIndex={batchCurrentIndex}
+                        activeRowNumber={currentBatchItem?.row_number ?? null}
+                        completedRowNumbers={completedRowNumbers}
+                        mode={isMailBatchMode ? "mail" : "excel"}
+                        onImport={handleImportBatchExcel}
+                        onSelectRow={handleSelectBatchRow}
+                        onPrevious={() => goToBatchIndex(batchCurrentIndex - 1)}
+                        onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
 
-            <SaveRecordBar
-              canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
-              isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
-              onSave={handleSave}
-              batchMode={hasVisibleBatch}
-              allCompleted={batchAllCompleted}
-              isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
-              onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
-              exportingReviewedBatch={exportReviewedBatch.isPending}
-            />
-
-            {isWorkspaceBatchMode ? (
-              <BatchExcelPanel
-                importing={importBatchExcel.isPending || batchSessions.isLoading}
-                fileName={batchFileName}
-                items={visibleBatchItems}
-                completedCount={batchCompletedCount}
-                currentIndex={batchCurrentIndex}
-                activeRowNumber={currentBatchItem?.row_number ?? null}
-                completedRowNumbers={completedRowNumbers}
-                mode={isMailBatchMode ? "mail" : "excel"}
-                onImport={handleImportBatchExcel}
-                onSelectRow={handleSelectBatchRow}
-                onPrevious={() => goToBatchIndex(batchCurrentIndex - 1)}
-                onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
-              />
-            ) : null}
-          </aside>
+                <div className="sticky bottom-0 border-t border-white/40 bg-white/86 p-3 backdrop-blur">
+                  <SaveRecordBar
+                    canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
+                    isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
+                    onSave={handleSave}
+                    batchMode={hasVisibleBatch}
+                    allCompleted={batchAllCompleted}
+                    isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
+                    onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
+                    exportingReviewedBatch={exportReviewedBatch.isPending}
+                  />
+                </div>
+              </section>
+            </aside>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setRightPanelCollapsed(false)}
+              className="fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full border border-line bg-white/92 px-4 py-3 text-sm text-ink shadow-card backdrop-blur transition hover:-translate-y-0.5 xl:inline-flex"
+            >
+              <PanelRightOpen size={16} />
+              展开侧栏
+            </button>
+          )}
         </div>
 
       </div>

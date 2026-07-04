@@ -1,5 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
+import logging
+from time import perf_counter
 from typing import Any
 
 from sqlalchemy.orm import sessionmaker
@@ -12,7 +14,8 @@ from app.services.planner_service import PlannerService
 from app.services.rag_service import RagService
 from app.services.safety_service import RISK_ORDER, SafetyService
 
-RAG_REFERENCE_LIMIT = 1
+RAG_REFERENCE_LIMIT = 2
+logger = logging.getLogger("uvicorn.error")
 
 
 class OrchestrationService:
@@ -38,6 +41,7 @@ class OrchestrationService:
         persona_names: list[str],
         compare_sources: bool = False,
         source_mode: str = "auto",
+        use_deep_thinking: bool = False,
     ) -> AsyncIterator[str]:
         ordered_personas: list[str] = []
         for persona_name in persona_names:
@@ -50,6 +54,7 @@ class OrchestrationService:
         generator_targets = self._build_generator_targets(compare_sources, source_mode)
 
         async def worker(persona_name: str, target: dict[str, str]) -> None:
+            worker_started_at = perf_counter()
             draft_id = self._build_draft_id(persona_name, target["source"])
             await queue.put(
                 {
@@ -61,12 +66,16 @@ class OrchestrationService:
                 }
             )
             try:
+                planner_started_at = perf_counter()
                 planner_output = await self.planner_service.create_plan(user_input, persona_name)
+                planner_ms = self._elapsed_ms(planner_started_at)
+                rag_started_at = perf_counter()
                 planner_output = self._attach_rag_references(
                     user_input=user_input,
                     persona_name=persona_name,
                     planner_output=planner_output,
                 )
+                rag_ms = self._elapsed_ms(rag_started_at)
                 await queue.put(
                     {
                         "event": "planner_ready",
@@ -77,15 +86,20 @@ class OrchestrationService:
                         "planner_output": planner_output,
                     }
                 )
-                draft_result = await self.generator_service.generate_with_mode(
+                generator_started_at = perf_counter()
+                streamed_chunks: list[str] = []
+                first_token_ms: int | None = None
+                async for chunk in self.generator_service.stream_with_mode(
                     user_input=user_input,
                     planner_output=planner_output,
                     persona_name=persona_name,
                     mode=target["mode"],
-                )
-                reviewed_draft = self._review_draft_response(draft_result["response"])
-                full_response = reviewed_draft["response"]
-                async for chunk in self.generator_service.emit_chunks(full_response):
+                    audience="counselor",
+                    use_deep_thinking=use_deep_thinking,
+                ):
+                    if first_token_ms is None:
+                        first_token_ms = self._elapsed_ms(generator_started_at)
+                    streamed_chunks.append(chunk)
                     await queue.put(
                         {
                             "event": "draft_delta",
@@ -96,6 +110,13 @@ class OrchestrationService:
                             "delta": chunk,
                         }
                     )
+                raw_response = "".join(streamed_chunks)
+                generator_ms = self._elapsed_ms(generator_started_at)
+                safety_started_at = perf_counter()
+                reviewed_draft = self._review_draft_response(raw_response)
+                safety_ms = self._elapsed_ms(safety_started_at)
+                full_response = reviewed_draft["response"]
+                emit_ms = 0
 
                 completed_by_draft_id[draft_id] = {
                     "draft_id": draft_id,
@@ -105,7 +126,7 @@ class OrchestrationService:
                     "style_config": build_style_summary(persona_name),
                     "planner_output": planner_output,
                     "response": full_response,
-                    "raw_response": draft_result["raw"],
+                    "raw_response": raw_response,
                     "safety_review": reviewed_draft["safety_review"],
                 }
                 await queue.put(
@@ -118,6 +139,21 @@ class OrchestrationService:
                         "response": full_response,
                         "safety_review": reviewed_draft["safety_review"],
                     }
+                )
+                self._log_generation_timing(
+                    route="stream_generation",
+                    persona_name=persona_name,
+                    source=target["source"],
+                    user_input=user_input,
+                    planner_output=planner_output,
+                    response=full_response,
+                    planner_ms=planner_ms,
+                    rag_ms=rag_ms,
+                    generator_ms=generator_ms,
+                    first_token_ms=first_token_ms or generator_ms,
+                    safety_ms=safety_ms,
+                    emit_ms=emit_ms,
+                    total_ms=self._elapsed_ms(worker_started_at),
                 )
             except Exception as exc:
                 await queue.put(
@@ -178,6 +214,8 @@ class OrchestrationService:
         persona_names: list[str],
         compare_sources: bool = False,
         source_mode: str = "auto",
+        audience: str = "counselor",
+        use_deep_thinking: bool = False,
     ) -> list[dict[str, Any]]:
         ordered_personas: list[str] = []
         for persona_name in persona_names:
@@ -200,6 +238,8 @@ class OrchestrationService:
                     planner_output=planner_output,
                     persona_name=persona_name,
                     mode=target["mode"],
+                    audience=audience,
+                    use_deep_thinking=use_deep_thinking,
                 )
                 reviewed_draft = self._review_draft_response(draft_result["response"])
                 return {
@@ -227,22 +267,60 @@ class OrchestrationService:
         persona_name: str,
         planner_output: dict[str, Any],
         source_mode: str = "auto",
+        use_deep_thinking: bool = False,
     ) -> dict[str, Any]:
+        started_at = perf_counter()
         normalized_persona = normalize_persona_name(persona_name)
         target = self._build_generator_targets(False, source_mode)[0]
-        planner_output = {key: value for key, value in planner_output.items() if key != "story_plan"}
+        planner_output = {
+            key: value
+            for key, value in planner_output.items()
+            if key
+            not in {
+                "story_plan",
+                "surface_issue",
+                "positive_motive",
+                "persona_strategy",
+                "response_focus",
+                "action_strategy",
+                "sample_words",
+            }
+        }
+        rag_started_at = perf_counter()
         enriched_planner_output = self._attach_rag_references(
             user_input=user_input,
             persona_name=normalized_persona,
             planner_output=planner_output,
         )
+        rag_ms = self._elapsed_ms(rag_started_at)
+        generator_started_at = perf_counter()
         draft_result = await self.generator_service.generate_with_mode(
             user_input=user_input,
             planner_output=enriched_planner_output,
             persona_name=normalized_persona,
             mode=target["mode"],
+            audience="counselor",
+            use_deep_thinking=use_deep_thinking,
         )
+        generator_ms = self._elapsed_ms(generator_started_at)
+        safety_started_at = perf_counter()
         reviewed_draft = self._review_draft_response(draft_result["response"])
+        safety_ms = self._elapsed_ms(safety_started_at)
+        self._log_generation_timing(
+            route="generate_from_plan",
+            persona_name=normalized_persona,
+            source=target["source"],
+            user_input=user_input,
+            planner_output=enriched_planner_output,
+            response=reviewed_draft["response"],
+            planner_ms=0,
+            rag_ms=rag_ms,
+            generator_ms=generator_ms,
+            first_token_ms=generator_ms,
+            safety_ms=safety_ms,
+            emit_ms=0,
+            total_ms=self._elapsed_ms(started_at),
+        )
         return {
             "draft_id": self._build_draft_id(normalized_persona, target["source"]),
             "persona_name": normalized_persona,
@@ -262,6 +340,7 @@ class OrchestrationService:
         expert_annotation: str,
         persona_name: str,
         source_mode: str = "auto",
+        use_deep_thinking: bool = False,
     ) -> dict[str, Any]:
         normalized_persona = normalize_persona_name(persona_name)
         target = self._build_generator_targets(False, source_mode)[0]
@@ -320,6 +399,8 @@ class OrchestrationService:
             messages=messages,
             mode=target["mode"],
             temperature=0.35,
+            audience="counselor",
+            use_deep_thinking=use_deep_thinking,
         )
         from app.utils.json_parse import safe_json_parse
 
@@ -383,6 +464,8 @@ class OrchestrationService:
         persona_name: str,
         planner_output: dict[str, Any],
     ) -> dict[str, Any]:
+        if not self.settings.rag_enabled:
+            return planner_output
         if self.session_maker is None:
             return planner_output
         db = self.session_maker()
@@ -402,3 +485,43 @@ class OrchestrationService:
             **planner_output,
             "rag_references": [sample.to_prompt_block() for sample in samples],
         }
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> int:
+        return int((perf_counter() - started_at) * 1000)
+
+    def _log_generation_timing(
+        self,
+        route: str,
+        persona_name: str,
+        source: str,
+        user_input: str,
+        planner_output: dict[str, Any],
+        response: str,
+        planner_ms: int,
+        rag_ms: int,
+        generator_ms: int,
+        first_token_ms: int,
+        safety_ms: int,
+        emit_ms: int,
+        total_ms: int,
+    ) -> None:
+        rag_count = len(planner_output.get("rag_references") or [])
+        logger.info(
+            "generation_timing route=%s persona=%s source=%s total_ms=%s planner_ms=%s rag_ms=%s "
+            "generator_ms=%s first_token_ms=%s safety_ms=%s emit_ms=%s input_chars=%s planner_chars=%s rag_count=%s response_chars=%s",
+            route,
+            persona_name,
+            source,
+            total_ms,
+            planner_ms,
+            rag_ms,
+            generator_ms,
+            first_token_ms,
+            safety_ms,
+            emit_ms,
+            len(user_input),
+            len(str(planner_output)),
+            rag_count,
+            len(response),
+        )

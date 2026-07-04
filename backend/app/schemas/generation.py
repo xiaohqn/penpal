@@ -22,6 +22,7 @@ class GenerationRequest(BaseModel):
     persona_names: list[str] = Field(min_length=1, max_length=5)
     compare_sources: bool = False
     source_mode: str = "auto"
+    use_deep_thinking: bool = False
 
     @field_validator("user_input")
     @classmethod
@@ -57,6 +58,7 @@ class GenerateFromPlanRequest(BaseModel):
     persona_name: str = Field(min_length=1)
     planner_output: dict[str, Any] = Field(default_factory=dict)
     source_mode: str = "auto"
+    use_deep_thinking: bool = False
 
     @field_validator("source_mode")
     @classmethod
@@ -81,6 +83,7 @@ class RewriteAnnotationsRequest(BaseModel):
     expert_annotation: str = ""
     persona_name: str = Field(min_length=1)
     source_mode: str = "auto"
+    use_deep_thinking: bool = False
 
     @field_validator("source_mode")
     @classmethod

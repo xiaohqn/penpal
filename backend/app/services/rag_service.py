@@ -13,13 +13,10 @@ from app.db.models import ConsultationRecord
 
 
 LABEL_FIELDS = (
-    "surface_issue",
     "core_issue",
-    "positive_motive",
     "wrong_but_easy_answer",
     "value_guidance",
     "risk_assessment",
-    "response_focus",
 )
 
 TAG_KEYWORDS = {
@@ -57,6 +54,9 @@ class RetrievedSample:
             "user_input_excerpt": self.user_input[:700],
             "expert_response_excerpt": self.expert_response[:response_limit],
             "expert_annotation": self.expert_annotation[:500],
+            "user_input_full": self.user_input,
+            "expert_response_full": self.expert_response,
+            "expert_annotation_full": self.expert_annotation,
         }
 
 
@@ -79,9 +79,6 @@ class RagService:
 
     def build_planner_labels(self, planner_output: dict[str, Any]) -> dict[str, Any]:
         labels = {field: planner_output.get(field, "") for field in LABEL_FIELDS if planner_output.get(field)}
-        action_strategy = planner_output.get("action_strategy")
-        if isinstance(action_strategy, list):
-            labels["action_strategy"] = [str(item) for item in action_strategy[:4]]
         return labels
 
     def build_sample_tags(

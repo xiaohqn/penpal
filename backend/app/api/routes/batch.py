@@ -255,6 +255,7 @@ async def regenerate_batch_session_item(
         user_input=augmented_user_input,
         persona_name=payload.selected_persona_name,
         planner_output=payload.planner_output or item.planner_output_json or {},
+        use_deep_thinking=payload.use_deep_thinking,
     )
     if selected_draft is None:
         raise HTTPException(status_code=400, detail="No draft generated")

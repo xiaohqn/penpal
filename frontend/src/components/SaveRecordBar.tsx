@@ -20,10 +20,10 @@ export function SaveRecordBar({
   exportingReviewedBatch = false,
 }: Props) {
   return (
-    <div className="lilac-gradient flex flex-col gap-4 rounded-panel border border-white/30 p-5 text-white shadow-[0_24px_60px_rgba(108,83,171,0.26)] md:flex-row md:items-center md:justify-between">
-      <div className="max-w-2xl">
+    <div className="lilac-gradient flex flex-col gap-3 rounded-[20px] border border-white/30 p-3 text-white shadow-[0_18px_42px_rgba(108,83,171,0.24)]">
+      <div>
         <p className="text-xs uppercase tracking-[0.18em] text-white/60">最后一步</p>
-        <p className="mt-2 text-sm leading-7 text-white/82">
+        <p className="mt-1 text-xs leading-6 text-white/82">
           {batchMode && allCompleted
             ? "当前批次已经全部完成，可以回看版本、继续修改已完成条目，或导出最终结果。"
             : batchMode && isLastBatchItem
@@ -33,13 +33,13 @@ export function SaveRecordBar({
             : "保存后会把原始问题、候选草稿、处理过程、批注和最终满意版本一起入库。"}
         </p>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-2">
         {batchMode && onExportReviewedBatch ? (
           <button
             type="button"
             disabled={!allCompleted || exportingReviewedBatch}
             onClick={onExportReviewedBatch}
-            className="rounded-full border border-white/18 bg-white/8 px-5 py-3 text-sm text-white transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-45"
+            className="rounded-full border border-white/18 bg-white/8 px-4 py-2 text-sm text-white transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {exportingReviewedBatch ? "导出中..." : "导出最终结果 Excel"}
           </button>
@@ -48,7 +48,7 @@ export function SaveRecordBar({
           type="button"
           disabled={!canSave || isSaving}
           onClick={onSave}
-          className="rounded-full bg-white px-5 py-3 text-sm font-medium text-ink shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-white/40 disabled:text-ink/55"
+          className="rounded-full bg-white px-4 py-2.5 text-sm font-medium text-ink shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-white/40 disabled:text-ink/55"
         >
           {isSaving
             ? "保存中..."

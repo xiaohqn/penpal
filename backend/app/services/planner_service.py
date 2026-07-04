@@ -5,6 +5,25 @@ from app.prompts.planner_prompt import build_planner_system_prompt
 from app.utils.json_parse import safe_json_parse
 
 RISK_KEYWORDS = ("自杀", "轻生", "不想活", "活着很累", "伤害自己", "自残", "扛不住了")
+GENERATION_PLAN_ALIASES = (
+    "generation_plan",
+    "reply_outline",
+    "outline",
+    "plan",
+    "writing_plan",
+    "response_plan",
+)
+OMITTED_PLANNER_FIELDS = {
+    "story_plan",
+    "surface_issue",
+    "positive_motive",
+    "persona_strategy",
+    "response_focus",
+    "action_strategy",
+    "sample_words",
+    "must_include",
+    "must_avoid",
+}
 
 
 class PlannerService:
@@ -33,7 +52,9 @@ class PlannerService:
         if not parsed:
             raise ValueError("Planner did not return valid JSON")
 
-        parsed.pop("story_plan", None)
+        self._normalize_generation_plan(parsed)
+        for field in OMITTED_PLANNER_FIELDS:
+            parsed.pop(field, None)
         parsed["raw"] = raw
         parsed["style_summary"] = style_summary
         return parsed
@@ -48,38 +69,58 @@ class PlannerService:
 
         return {
             "intention": "用户正在承受持续情绪压力，希望被理解，也希望有人帮自己看清困局并找到下一步。",
-            "surface_issue": "来信者描述了学习、人际、家庭或情绪上的具体困扰。",
             "core_issue": "真正需要处理的是压力之下的自我价值感受损、掌控感下降，以及不知道如何把求助和行动落到具体场景。",
-            "positive_motive": "来信者愿意写信，本身说明仍然想把生活过好，也在寻找一个更安全、更有效的办法。",
             "wrong_but_easy_answer": "不要只复述痛苦，也不要只给泛泛的学习计划、沟通建议或空洞鼓励。",
             "risk_assessment": risk_assessment,
             "value_guidance": "把问题和个人价值分开；遇到危险念头时，求助是保护自己，不是添麻烦。",
-            "persona_strategy": (
-                f"以{style_summary['persona_name']}的风格写作，突出"
-                f"{style_summary['empathy']}式共情、{style_summary['advice']}式下一步引导与"
-                f"{style_summary['cognitive']}式认知介入。"
-            ),
-            "response_focus": "先看见来信者仍想把生活过好的正面动机，再把问题和自我价值分开，并收束到一个具体可尝试的小动作。",
-            "action_strategy": [
-                "先把最重的问题命名出来，而不是一次解决所有问题。",
-                "找到一个可信任的大人、老师或同伴，用一句话开启求助。",
-            ],
-            "sample_words": [
-                "我最近真的有点扛不住，想请你先听我说十分钟。",
-                "我不是不想变好，我是现在不知道从哪一步开始。",
-            ],
-            "must_include": [
-                "明确回应用户并不是矫情或软弱",
-                "至少提供一个可以立刻执行的小动作",
-            ],
-            "must_avoid": [
-                "空洞鸡汤",
-                "居高临下的说教",
-                "过度诗化的比喻",
-            ],
             "generation_plan": (
                 "写成自然书信，不要像清单，也不要像评估报告。先陪伴，再解释，把可以执行的小动作自然放进段落里。"
             ),
             "style_summary": style_summary,
             "raw": "",
         }
+
+    def _normalize_generation_plan(self, planner_output: dict[str, object]) -> None:
+        current_value = self._render_generation_plan_value(planner_output.get("generation_plan"))
+        if current_value:
+            planner_output["generation_plan"] = current_value
+            return
+
+        for alias in GENERATION_PLAN_ALIASES:
+            alias_value = self._render_generation_plan_value(planner_output.get(alias))
+            if alias_value:
+                planner_output["generation_plan"] = alias_value
+                return
+
+    def _render_generation_plan_value(self, value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            return "\n".join(str(item).strip() for item in value if str(item).strip())
+        if isinstance(value, dict):
+            preferred_keys = (
+                "core_focus",
+                "empathy_entry",
+                "analysis_direction",
+                "action_direction",
+                "risk_handling",
+                "ending",
+            )
+            lines: list[str] = []
+            used_keys: set[str] = set()
+            for key in preferred_keys:
+                if key in value:
+                    rendered = self._render_generation_plan_value(value.get(key))
+                    if rendered:
+                        lines.append(rendered)
+                        used_keys.add(key)
+            for key, nested_value in value.items():
+                if key in used_keys:
+                    continue
+                rendered = self._render_generation_plan_value(nested_value)
+                if rendered:
+                    lines.append(rendered)
+            return "\n".join(lines).strip()
+        return str(value).strip()

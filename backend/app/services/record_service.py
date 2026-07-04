@@ -7,6 +7,7 @@ from app.schemas.record import (
     ConsultationRecordListResponse,
     ConsultationRecordResponse,
     ConsultationRecordSaveRequest,
+    ConsultationRecordUpdateRequest,
 )
 from app.services.rag_service import RagService
 
@@ -116,6 +117,41 @@ class RecordService:
             return None
         if not include_all and record.counselor_id != counselor_id:
             return None
+        return ConsultationRecordResponse.model_validate(record)
+
+    def update_record(
+        self,
+        db: Session,
+        record_id: int,
+        payload: ConsultationRecordUpdateRequest,
+        counselor_id: str = "default",
+        include_all: bool = False,
+    ) -> ConsultationRecordResponse | None:
+        record = db.get(ConsultationRecord, record_id)
+        if record is None:
+            return None
+        if not include_all and record.counselor_id != counselor_id:
+            return None
+
+        if payload.user_input is not None:
+            record.user_input = payload.user_input
+        if payload.expert_polished_response is not None:
+            record.expert_polished_response = payload.expert_polished_response
+        if payload.expert_annotation is not None:
+            record.expert_annotation = payload.expert_annotation
+        if payload.rag_ready is not None:
+            record.rag_ready = payload.rag_ready
+        if payload.sample_reason is not None:
+            record.sample_reason = payload.sample_reason
+        if payload.sample_tags is not None:
+            record.sample_tags_json = payload.sample_tags
+        if payload.planner_labels is not None:
+            record.planner_labels_json = payload.planner_labels
+        if payload.evaluation is not None:
+            record.evaluation_json = payload.evaluation
+
+        db.commit()
+        db.refresh(record)
         return ConsultationRecordResponse.model_validate(record)
 
     def get_all_records_for_export(

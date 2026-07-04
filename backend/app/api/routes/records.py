@@ -7,6 +7,7 @@ from app.schemas.record import (
     ConsultationRecordResponse,
     ConsultationRecordSaveRequest,
     ConsultationRecordListResponse,
+    ConsultationRecordUpdateRequest,
 )
 from app.services.record_service import RecordService
 
@@ -56,6 +57,27 @@ def get_record(
     record = record_service.get_record(
         db=db,
         record_id=record_id,
+        counselor_id=counselor_id,
+        include_all=scope == "all",
+    )
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    return record
+
+
+@router.patch("/{record_id}", response_model=ConsultationRecordResponse)
+def update_record(
+    record_id: int,
+    payload: ConsultationRecordUpdateRequest,
+    scope: str = Query(default="mine", pattern="^(mine|all)$"),
+    counselor_id: str = Depends(get_counselor_id),
+    db: Session = Depends(get_db_session),
+    record_service: RecordService = Depends(get_record_service),
+) -> ConsultationRecordResponse:
+    record = record_service.update_record(
+        db=db,
+        record_id=record_id,
+        payload=payload,
         counselor_id=counselor_id,
         include_all=scope == "all",
     )
