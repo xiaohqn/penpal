@@ -11,6 +11,7 @@ from app.api.routes.rag import router as rag_router
 from app.api.routes.user_letters import router as user_letters_router
 from app.api.routes.mail_threads import router as mail_threads_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.workspace_tasks import router as workspace_tasks_router
 from app.core.config import Settings, get_settings
 from app.db.session import build_engine, build_session_factory, init_db
 from app.services.batch_session_service import BatchSessionService
@@ -25,6 +26,7 @@ from app.services.user_letter_service import UserLetterService
 from app.services.mail_thread_service import MailThreadService
 from app.services.safety_service import SafetyService
 from app.services.auth_service import AuthService
+from app.services.workspace_task_service import WorkspaceTaskService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -77,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record_service=record_service,
     )
     auth_service = AuthService(settings=settings)
+    workspace_task_service = WorkspaceTaskService()
 
     app.state.settings = settings
     app.state.engine = engine
@@ -94,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.safety_service = safety_service
     app.state.mail_thread_service = mail_thread_service
     app.state.auth_service = auth_service
+    app.state.workspace_task_service = workspace_task_service
 
     api_router = APIRouter(prefix=settings.api_v1_prefix)
     api_router.include_router(health_router)
@@ -105,6 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(user_letters_router)
     api_router.include_router(mail_threads_router)
     api_router.include_router(auth_router)
+    api_router.include_router(workspace_tasks_router)
     app.include_router(api_router)
 
     return app

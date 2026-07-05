@@ -136,6 +136,26 @@ class BatchSessionItem(Base):
     session: Mapped[BatchSession] = relationship(back_populates="items")
 
 
+class WorkspaceTask(Base):
+    __tablename__ = "workspace_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    counselor_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False, default="default")
+    mode: Mapped[str] = mapped_column(String(32), index=True, nullable=False, default="single")
+    status: Mapped[str] = mapped_column(String(32), index=True, nullable=False, default="draft")
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="未命名工单")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    state_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    batch_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
 class UserLetter(Base):
     __tablename__ = "user_letters"
 

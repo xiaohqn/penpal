@@ -1,6 +1,6 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { LogOut, PanelRightClose, PanelRightOpen, ScrollText, Sparkles } from "lucide-react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { useAuth } from "../app/auth";
 import { BatchExcelPanel } from "../components/BatchExcelPanel";
@@ -16,10 +16,13 @@ import {
 import { ResponseVersionPanel } from "../components/ResponseVersionPanel";
 import { SaveRecordBar } from "../components/SaveRecordBar";
 import { UserLetterPanel } from "../components/UserLetterPanel";
+import { WorkspaceTaskSidebar } from "../components/WorkspaceTaskSidebar";
 import scirScLogo from "../assets/logo-mark.png";
 import { useGenerationWorkspace, usePersonas } from "../features/generation/hooks";
 import type { DraftCandidate, PlannerOutput } from "../features/generation/types";
 import {
+  useAssignedMailThreads,
+  useCreateAssignedThreadWorkspaceSession,
   useCreateAssignedThreadsWorkspaceSession,
 } from "../features/mailThreads/hooks";
 import {
@@ -40,9 +43,11 @@ import type {
   SourceAnnotation,
   MailThreadWorkspaceContext,
 } from "../features/records/types";
+import { useCreateWorkspaceTask, useLatestWorkspaceTask, useUpdateWorkspaceTask, useWorkspaceTasks } from "../features/workspaceTasks/hooks";
+import type { WorkspaceTask, WorkspaceTaskSavePayload, WorkspaceTaskState, WorkspaceTaskStatus } from "../features/workspaceTasks/types";
 
 type WorkspaceMode = "single" | "excel_batch" | "mail_batch";
-type RightPanelTab = "planner" | "revision" | "evaluation" | "batch";
+type RightPanelTab = "planner" | "revision" | "evaluation";
 type WorkspaceBatchItem = ReturnType<typeof mapBatchSessionItem>;
 const DEFAULT_PERSONA_NAME = "理性破局教练";
 const PERSONA_DISPLAY_NAMES: Record<string, string> = {
@@ -254,7 +259,13 @@ export function WorkspacePage() {
   const regenerateBatchSessionItem = useRegenerateBatchSessionItem();
   const rollbackBatchSessionItem = useRollbackBatchSessionItem();
   const exportReviewedBatch = useExportReviewedBatch();
+  const assignedMailThreads = useAssignedMailThreads();
+  const createAssignedThreadWorkspace = useCreateAssignedThreadWorkspaceSession();
   const createAssignedThreadsWorkspace = useCreateAssignedThreadsWorkspaceSession();
+  const workspaceTasks = useWorkspaceTasks();
+  const latestWorkspaceTask = useLatestWorkspaceTask();
+  const createWorkspaceTask = useCreateWorkspaceTask();
+  const updateWorkspaceTask = useUpdateWorkspaceTask();
 
   const personas = useMemo(() => {
     const catalog = data?.personas ?? [];
@@ -286,7 +297,12 @@ export function WorkspacePage() {
   const [activeVersionIndex, setActiveVersionIndex] = useState(0);
   const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("planner");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [batchDashboardOpen, setBatchDashboardOpen] = useState(false);
   const [useDeepThinking, setUseDeepThinking] = useState(false);
+  const [activeWorkspaceTaskId, setActiveWorkspaceTaskId] = useState<number | null>(null);
+  const [activeWorkspaceTaskStatus, setActiveWorkspaceTaskStatus] = useState<WorkspaceTaskStatus>("draft");
+  const [taskSidebarCollapsed, setTaskSidebarCollapsed] = useState(false);
+  const [hydratedInitialTask, setHydratedInitialTask] = useState(false);
   const [lastHydratedDraft, setLastHydratedDraft] = useState<{
     personaName: string | null;
     response: string;
@@ -311,7 +327,6 @@ export function WorkspacePage() {
     { key: "planner" as const, label: "核心判断" },
     { key: "revision" as const, label: "批注修订" },
     { key: "evaluation" as const, label: "AI 评价" },
-    ...(isWorkspaceBatchMode ? [{ key: "batch" as const, label: "批量进度" }] : []),
   ];
   const reviewedBatchItems = buildReviewedItems(visibleBatchItems);
   const generationBusy = jobLoading || regenerateBatchSessionItem.isPending;
@@ -321,24 +336,184 @@ export function WorkspacePage() {
       ? currentBatchItem.context_json
       : legacySplit?.context ?? null;
 
-  useEffect(() => {
-    if (!isWorkspaceBatchMode && activeRightTab === "batch") {
-      setActiveRightTab("planner");
+  function buildTaskState(): WorkspaceTaskState {
+    return {
+      userInput,
+      selectedPersonas,
+      selectedPersona,
+      drafts,
+      polishedText,
+      expertAnnotation,
+      sourceAnnotations,
+      responseVersions,
+      responseEvaluation,
+      activeVersionIndex,
+      useDeepThinking,
+      activeRightTab,
+    };
+  }
+
+  function buildTaskPayload(status: "draft" | "in_progress" | "completed" = "in_progress"): WorkspaceTaskSavePayload {
+    const summary = userInput.trim().slice(0, 80);
+    return {
+      mode: "single",
+      status,
+      title: summary ? summary.slice(0, 28) : "单封 AI 工单",
+      summary,
+      state: buildTaskState(),
+    };
+  }
+
+  function restoreWorkspaceTask(task: WorkspaceTask) {
+    const state = task.state_json ?? {};
+    const nextMode: WorkspaceMode = task.mode === "excel_batch" || task.mode === "mail_batch" ? task.mode : "single";
+    setWorkspaceMode(nextMode);
+    setBatchDashboardOpen(false);
+    setActiveSessionId(null);
+    setBatchFileName(null);
+    setBatchCurrentIndex(0);
+    setActiveWorkspaceTaskId(task.id);
+    setActiveWorkspaceTaskStatus(task.status);
+    setUserInput(state.userInput || DEFAULT_INPUT);
+    setSelectedPersonas(state.selectedPersonas?.length ? state.selectedPersonas : personas[0]?.name ? [personas[0].name] : []);
+    setPolishedText(state.polishedText || "");
+    setExpertAnnotation(state.expertAnnotation || "");
+    setSourceAnnotations(state.sourceAnnotations || []);
+    setResponseVersions(state.responseVersions || []);
+    setResponseEvaluation(state.responseEvaluation || EMPTY_EVALUATION);
+    setActiveVersionIndex(state.activeVersionIndex ?? 0);
+    setUseDeepThinking(Boolean(state.useDeepThinking));
+    setActiveRightTab((state.activeRightTab as RightPanelTab) || "planner");
+    if (state.drafts?.length) {
+      hydrateWorkspace({ drafts: state.drafts, selectedPersona: state.selectedPersona ?? null });
+    } else {
+      resetWorkspace();
     }
-  }, [activeRightTab, isWorkspaceBatchMode]);
+    setStatusText(`已恢复工单：${task.title || "未命名工单"}`);
+  }
+
+  async function ensureWorkspaceTask(status: "draft" | "in_progress" | "completed" = "in_progress", taskId = activeWorkspaceTaskId) {
+    if (isWorkspaceBatchMode) {
+      return null;
+    }
+    const payload = buildTaskPayload(status);
+    if (taskId) {
+      const updated = await updateWorkspaceTask.mutateAsync({ taskId, payload });
+      setActiveWorkspaceTaskStatus(updated.status);
+      return updated;
+    }
+    const created = await createWorkspaceTask.mutateAsync(payload);
+    setActiveWorkspaceTaskId(created.id);
+    setActiveWorkspaceTaskStatus(created.status);
+    return created;
+  }
+
+  async function handleNewSingleTask() {
+    setWorkspaceMode("single");
+    setActiveSessionId(null);
+    setActiveWorkspaceTaskId(null);
+    setActiveWorkspaceTaskStatus("draft");
+    setBatchDashboardOpen(false);
+    resetWorkspace();
+    setUserInput("");
+    setSelectedPersonas(personas[0]?.name ? [personas[0].name] : []);
+    setPolishedText("");
+    setExpertAnnotation("");
+    setSourceAnnotations([]);
+    setResponseVersions([]);
+    setResponseEvaluation(EMPTY_EVALUATION);
+    setActiveVersionIndex(0);
+    setActiveRightTab("planner");
+    try {
+      const created = await createWorkspaceTask.mutateAsync({
+        mode: "single",
+        status: "draft",
+        title: "单封 AI 工单",
+        summary: "",
+        state: {
+          userInput: "",
+          selectedPersonas: personas[0]?.name ? [personas[0].name] : [],
+          selectedPersona: null,
+          drafts: [],
+          polishedText: "",
+          expertAnnotation: "",
+          sourceAnnotations: [],
+          responseVersions: [],
+          responseEvaluation: EMPTY_EVALUATION,
+          activeVersionIndex: 0,
+          useDeepThinking,
+          activeRightTab: "planner",
+        },
+      });
+      setActiveWorkspaceTaskId(created.id);
+      setActiveWorkspaceTaskStatus(created.status);
+      setStatusText("已新建单封工单，输入内容会自动保存。");
+    } catch (error) {
+      setStatusText(error instanceof Error ? error.message : "新建工单失败");
+    }
+  }
+
+  function handleSelectBatchTask(sessionId: number, mode: WorkspaceMode) {
+    setActiveWorkspaceTaskId(null);
+    setActiveWorkspaceTaskStatus("draft");
+    setWorkspaceMode(mode);
+    setActiveSessionId(sessionId);
+    setBatchDashboardOpen(true);
+    setActiveRightTab("planner");
+    setStatusText(mode === "mail_batch" ? "已恢复人工书信批量工单。" : "已恢复 Excel 批量工单。");
+  }
+
+  useEffect(() => {
+    if (hydratedInitialTask || latestWorkspaceTask.isLoading) {
+      return;
+    }
+    setHydratedInitialTask(true);
+    if (latestWorkspaceTask.data && workspaceMode === "single" && !activeWorkspaceTaskId) {
+      restoreWorkspaceTask(latestWorkspaceTask.data);
+    }
+  }, [activeWorkspaceTaskId, hydratedInitialTask, latestWorkspaceTask.data, latestWorkspaceTask.isLoading, workspaceMode]);
+
+  useEffect(() => {
+    if (!activeWorkspaceTaskId || isWorkspaceBatchMode) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void updateWorkspaceTask.mutateAsync({
+        taskId: activeWorkspaceTaskId,
+        payload: buildTaskPayload(activeWorkspaceTaskStatus === "completed" ? "completed" : polishedText.trim() ? "in_progress" : "draft"),
+      });
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeWorkspaceTaskId,
+    activeWorkspaceTaskStatus,
+    activeRightTab,
+    drafts,
+    expertAnnotation,
+    isWorkspaceBatchMode,
+    polishedText,
+    responseEvaluation,
+    responseVersions,
+    selectedPersona,
+    selectedPersonas,
+    sourceAnnotations,
+    useDeepThinking,
+    userInput,
+  ]);
 
   useEffect(() => {
     if (routeState?.batchSessionId) {
       setActiveSessionId(routeState.batchSessionId);
       const nextMode = routeState.workspaceMode === "batch" ? "mail_batch" : routeState.workspaceMode ?? "excel_batch";
       setWorkspaceMode(nextMode);
+      setBatchDashboardOpen(true);
       if (routeState.statusText) {
         setStatusText(routeState.statusText);
       }
       navigate(".", { replace: true, state: null });
       return;
     }
-    if (activeSessionId !== null) {
+    if (!isWorkspaceBatchMode || activeSessionId !== null) {
       return;
     }
     const inProgress = availableSessions.find((session) => session.status !== "completed");
@@ -347,7 +522,7 @@ export function WorkspacePage() {
     if (nextSession) {
       setActiveSessionId(nextSession.id);
     }
-  }, [activeSessionId, availableSessions, navigate, routeState?.batchSessionId, routeState?.statusText, routeState?.workspaceMode]);
+  }, [activeSessionId, availableSessions, isWorkspaceBatchMode, navigate, routeState?.batchSessionId, routeState?.statusText, routeState?.workspaceMode]);
 
   useEffect(() => {
     if (!isBatchMode && personas.length > 0 && selectedPersonas.length === 0) {
@@ -455,6 +630,8 @@ export function WorkspacePage() {
     const index = visibleBatchItems.findIndex((item) => item.row_number === rowNumber);
     if (index >= 0) {
       setWorkspaceMode(isMailBatchMode ? "mail_batch" : "excel_batch");
+      setBatchDashboardOpen(false);
+      setActiveRightTab("planner");
       goToBatchIndex(index);
     }
   }
@@ -494,6 +671,7 @@ export function WorkspacePage() {
       setStatusText("默认回信模型尚未加载完成，请稍后再试。");
       return;
     }
+    const task = await ensureWorkspaceTask("in_progress");
     await startGeneration({
       user_input: buildGenerationInput(userInput, currentWorkspaceContext),
       persona_names: selectedPersonas,
@@ -501,6 +679,7 @@ export function WorkspacePage() {
       source_mode: "auto",
       use_deep_thinking: useDeepThinking,
     });
+    await ensureWorkspaceTask("in_progress", task?.id ?? activeWorkspaceTaskId);
   }
 
   async function handlePersistBatchItem(status: string, recordId?: number | null) {
@@ -620,6 +799,7 @@ export function WorkspacePage() {
           );
         }
       } else {
+        await ensureWorkspaceTask("completed");
         setStatusText("这条记录已经保存到历史库。");
       }
     } catch (error) {
@@ -631,8 +811,11 @@ export function WorkspacePage() {
     setStatusText(null);
     try {
       const result = await importBatchExcel.mutateAsync(file);
+      setActiveWorkspaceTaskId(null);
       setActiveSessionId(result.id);
       setWorkspaceMode("excel_batch");
+      setBatchDashboardOpen(true);
+      setActiveRightTab("planner");
       setBatchFileName(file.name);
       setStatusText(`已创建并持久化批量任务，共 ${result.total_items} 条。关闭网页后仍可继续处理。`);
     } catch (error) {
@@ -642,6 +825,9 @@ export function WorkspacePage() {
 
   function handleSelectExcelBatchMode() {
     setWorkspaceMode("excel_batch");
+    setActiveWorkspaceTaskId(null);
+    setBatchDashboardOpen(true);
+    setActiveRightTab("planner");
     const excelSession = availableSessions.find((session) => session.source_file_name !== "assigned-mail-threads" && session.source_file_name !== "assigned-mail-thread");
     if (excelSession) {
       setActiveSessionId(excelSession.id);
@@ -662,11 +848,34 @@ export function WorkspacePage() {
       const result = await createAssignedThreadsWorkspace.mutateAsync();
       setActiveSessionId(result.id);
       setWorkspaceMode("mail_batch");
+      setActiveWorkspaceTaskId(null);
+      setBatchDashboardOpen(true);
+      setActiveRightTab("planner");
       setBatchFileName("人工书信任务");
       setStatusText("已载入分配给你的人工书信任务。逐封生成、润色并保存后，会自动送达用户信箱。");
     } catch (error) {
       setWorkspaceMode("mail_batch");
+      setActiveWorkspaceTaskId(null);
+      setBatchDashboardOpen(true);
       setStatusText(error instanceof Error ? error.message : "暂时没有可载入的人工书信任务。");
+    }
+  }
+
+  async function handleSelectAssignedThread(threadId: number) {
+    setStatusText(null);
+    try {
+      const result = await createAssignedThreadWorkspace.mutateAsync(threadId);
+      setActiveWorkspaceTaskId(null);
+      setActiveWorkspaceTaskStatus("draft");
+      setWorkspaceMode("mail_batch");
+      setActiveSessionId(result.id);
+      setBatchCurrentIndex(0);
+      setBatchFileName("人工书信任务");
+      setBatchDashboardOpen(false);
+      setActiveRightTab("planner");
+      setStatusText("已打开这封人工指派书信，用户来信已锁定为只读。");
+    } catch (error) {
+      setStatusText(error instanceof Error ? error.message : "载入人工指派书信失败");
     }
   }
 
@@ -925,99 +1134,67 @@ export function WorkspacePage() {
 
   return (
     <main className="min-h-screen px-3 py-4 md:px-6 xl:px-8">
-      <div className="mx-auto max-w-[1760px]">
-        <header className="surface-glow mb-4 overflow-hidden rounded-[22px] border border-white/70 bg-white/84 px-4 py-3 shadow-soft backdrop-blur">
-          <div className="relative flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <img src={scirScLogo} alt="心灵笔友标志" className="h-14 w-20 shrink-0 object-contain mix-blend-multiply" />
-              <div className="min-w-0">
-                <h1 className="font-serif text-2xl text-ink md:text-3xl">
-                  <span className="lilac-text">心灵笔友</span>
-                </h1>
-                <p className="mt-0.5 text-sm leading-6 text-ink/64">
-                  咨询师 {user?.counselorId ?? "default"}
-                  {isWorkspaceBatchMode && hasVisibleBatch ? ` · 批量 ${batchCompletedCount}/${visibleBatchItems.length}` : ""}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="inline-flex rounded-full border border-line bg-white/72 p-1">
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMode("single")}
-                  className={`rounded-full px-3 py-1.5 text-sm transition ${
-                    workspaceMode === "single" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
-                  }`}
-                >
-                  普通模式
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSelectExcelBatchMode}
-                  className={`rounded-full px-3 py-1.5 text-sm transition ${
-                    workspaceMode === "excel_batch" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
-                  }`}
-                >
-                  Excel批量
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLoadAssignedMailBatch}
-                  disabled={createAssignedThreadsWorkspace.isPending}
-                  className={`rounded-full px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${
-                    workspaceMode === "mail_batch" ? "lilac-gradient text-white shadow-card" : "text-ink/72"
-                  }`}
-                >
-                  {createAssignedThreadsWorkspace.isPending ? "载入中..." : "人工书信"}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setUseDeepThinking((current) => !current)}
-                className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm transition ${
-                  useDeepThinking
-                    ? "border-amber bg-amber/12 text-ink shadow-card"
-                    : "border-line bg-white/70 text-ink/70 hover:bg-paper/85"
-                }`}
-              >
-                深度思考：{useDeepThinking ? "开" : "关"}
-              </button>
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={jobLoading || selectedPersonas.length === 0 || !userInput.trim()}
-                className="lilac-gradient inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-white shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <Sparkles size={16} />
-                {jobLoading ? "生成中..." : "生成回信草稿"}
-              </button>
-              <Link
-                to="/records"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-4 py-2 text-sm text-ink transition hover:bg-paper/85"
-              >
-                <ScrollText size={16} />
-                查看历史记录
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  logout();
-                  navigate("/login", { replace: true });
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/70 px-4 py-2 text-sm text-ink transition hover:bg-paper/85"
-              >
-                <LogOut size={16} />
-                退出登录
-              </button>
-            </div>
-          </div>
-        </header>
+      <div className="mx-auto flex max-w-[1900px] gap-4">
+        <WorkspaceTaskSidebar
+          tasks={workspaceTasks.data?.items ?? []}
+          batchSessions={availableSessions}
+          assignedThreads={assignedMailThreads.data?.items ?? []}
+          activeTaskId={activeWorkspaceTaskId}
+          activeBatchSessionId={activeSessionId}
+          collapsed={taskSidebarCollapsed}
+          importingExcel={importBatchExcel.isPending || batchSessions.isLoading}
+          loadingAssigned={createAssignedThreadsWorkspace.isPending || createAssignedThreadWorkspace.isPending}
+          logoSrc={scirScLogo}
+          counselorLabel={`咨询师 ${user?.counselorId ?? "default"}`}
+          onToggleCollapsed={() => setTaskSidebarCollapsed((current) => !current)}
+          onLogout={() => {
+            logout();
+            navigate("/login", { replace: true });
+          }}
+          onNewSingle={handleNewSingleTask}
+          onUploadExcel={handleImportBatchExcel}
+          onSelectTask={restoreWorkspaceTask}
+          onSelectBatch={(session, mode) => handleSelectBatchTask(session.id, mode)}
+          onSelectAssignedThread={(thread) => handleSelectAssignedThread(thread.id)}
+          onLoadAssignedQueue={handleLoadAssignedMailBatch}
+        />
 
+        <div className="min-w-0 flex-1">
+        {isWorkspaceBatchMode && batchDashboardOpen ? (
+          <div className="mt-4 grid gap-4">
+            {statusText ? (
+              <div className="rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm leading-7 text-moss shadow-card">
+                {statusText}
+              </div>
+            ) : null}
+            <BatchExcelPanel
+              importing={importBatchExcel.isPending || batchSessions.isLoading}
+              fileName={batchFileName}
+              items={visibleBatchItems}
+              completedCount={batchCompletedCount}
+              currentIndex={batchCurrentIndex}
+              activeRowNumber={currentBatchItem?.row_number ?? null}
+              completedRowNumbers={completedRowNumbers}
+              mode={isMailBatchMode ? "mail" : "excel"}
+              showImport={false}
+              onImport={handleImportBatchExcel}
+              onSelectRow={handleSelectBatchRow}
+              onPrevious={() => goToBatchIndex(batchCurrentIndex - 1)}
+              onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
+            />
+          </div>
+        ) : (
+          <>
         <UserLetterPanel
           value={userInput}
           onChange={setUserInput}
           readOnly={Boolean(currentBatchItem)}
           compact
+          canGenerate={selectedPersonas.length > 0 && Boolean(userInput.trim())}
+          generating={jobLoading}
+          useDeepThinking={useDeepThinking}
+          onToggleDeepThinking={() => setUseDeepThinking((current) => !current)}
+          onGenerate={handleGenerate}
           batchMeta={
             currentBatchItem
               ? {
@@ -1060,6 +1237,16 @@ export function WorkspacePage() {
               annotations={sourceAnnotations}
               onAddAnnotation={handleAddSourceAnnotation}
               onRemoveAnnotation={handleRemoveSourceAnnotation}
+            />
+            <SaveRecordBar
+              canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
+              isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
+              onSave={handleSave}
+              batchMode={hasVisibleBatch}
+              allCompleted={batchAllCompleted}
+              isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
+              onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
+              exportingReviewedBatch={exportReviewedBatch.isPending}
             />
           </div>
 
@@ -1139,37 +1326,6 @@ export function WorkspacePage() {
                     />
                   ) : null}
 
-                  {activeRightTab === "batch" && isWorkspaceBatchMode ? (
-                    <div>
-                      <BatchExcelPanel
-                        importing={importBatchExcel.isPending || batchSessions.isLoading}
-                        fileName={batchFileName}
-                        items={visibleBatchItems}
-                        completedCount={batchCompletedCount}
-                        currentIndex={batchCurrentIndex}
-                        activeRowNumber={currentBatchItem?.row_number ?? null}
-                        completedRowNumbers={completedRowNumbers}
-                        mode={isMailBatchMode ? "mail" : "excel"}
-                        onImport={handleImportBatchExcel}
-                        onSelectRow={handleSelectBatchRow}
-                        onPrevious={() => goToBatchIndex(batchCurrentIndex - 1)}
-                        onNext={() => goToBatchIndex(batchCurrentIndex + 1)}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="sticky bottom-0 border-t border-white/40 bg-white/86 p-3 backdrop-blur">
-                  <SaveRecordBar
-                    canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}
-                    isSaving={saveRecord.isPending || updateBatchSessionItem.isPending}
-                    onSave={handleSave}
-                    batchMode={hasVisibleBatch}
-                    allCompleted={batchAllCompleted}
-                    isLastBatchItem={hasVisibleBatch && batchCurrentIndex >= visibleBatchItems.length - 1}
-                    onExportReviewedBatch={hasVisibleBatch ? handleExportReviewedBatch : null}
-                    exportingReviewedBatch={exportReviewedBatch.isPending}
-                  />
                 </div>
               </section>
             </aside>
@@ -1184,7 +1340,9 @@ export function WorkspacePage() {
             </button>
           )}
         </div>
-
+          </>
+        )}
+        </div>
       </div>
     </main>
   );

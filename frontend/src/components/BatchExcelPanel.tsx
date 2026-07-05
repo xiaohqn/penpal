@@ -16,6 +16,7 @@ type Props = {
   activeRowNumber: number | null;
   completedRowNumbers: number[];
   mode?: "excel" | "mail";
+  showImport?: boolean;
   onImport: (file: File) => void;
   onSelectRow: (rowNumber: number) => void;
   onPrevious: () => void;
@@ -31,6 +32,7 @@ export function BatchExcelPanel({
   activeRowNumber,
   completedRowNumbers,
   mode = "excel",
+  showImport = true,
   onImport,
   onSelectRow,
   onPrevious,
@@ -65,7 +67,7 @@ export function BatchExcelPanel({
         </button>
       </div>
 
-      {!isMailMode ? (
+      {!isMailMode && showImport ? (
         <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-[26px] border border-dashed border-line bg-paper/70 px-4 py-4 text-sm text-ink transition hover:border-amber/45 hover:bg-white">
           <Upload size={16} />
           {importing ? "导入中..." : "上传 Excel"}

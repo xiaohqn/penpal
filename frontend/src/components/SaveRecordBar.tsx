@@ -20,26 +20,13 @@ export function SaveRecordBar({
   exportingReviewedBatch = false,
 }: Props) {
   return (
-    <div className="lilac-gradient flex flex-col gap-3 rounded-[20px] border border-white/30 p-3 text-white shadow-[0_18px_42px_rgba(108,83,171,0.24)]">
-      <div>
-        <p className="text-xs uppercase tracking-[0.18em] text-white/60">最后一步</p>
-        <p className="mt-1 text-xs leading-6 text-white/82">
-          {batchMode && allCompleted
-            ? "当前批次已经全部完成，可以回看版本、继续修改已完成条目，或导出最终结果。"
-            : batchMode && isLastBatchItem
-              ? "这是当前批次的最后一条。完成后会停留在当前任务，并显示全部完成状态。"
-            : batchMode
-              ? "当前条目完成后会进入下一条；只要留下专家批注或回复高亮批注，系统就会自动记录处理过程和最终版本。"
-            : "保存后会把原始问题、候选草稿、处理过程、批注和最终满意版本一起入库。"}
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
         {batchMode && onExportReviewedBatch ? (
           <button
             type="button"
             disabled={!allCompleted || exportingReviewedBatch}
             onClick={onExportReviewedBatch}
-            className="rounded-full border border-white/18 bg-white/8 px-4 py-2 text-sm text-white transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-45"
+            className="rounded-full border border-line bg-white/72 px-4 py-2 text-sm text-ink transition hover:bg-paper/85 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {exportingReviewedBatch ? "导出中..." : "导出最终结果 Excel"}
           </button>
@@ -48,7 +35,7 @@ export function SaveRecordBar({
           type="button"
           disabled={!canSave || isSaving}
           onClick={onSave}
-          className="rounded-full bg-white px-4 py-2.5 text-sm font-medium text-ink shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-white/40 disabled:text-ink/55"
+          className="lilac-gradient rounded-full px-5 py-2.5 text-sm font-medium text-white shadow-card transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isSaving
             ? "保存中..."
@@ -60,7 +47,6 @@ export function SaveRecordBar({
                   ? "完成当前条目并进入下一条"
                   : "记录处理过程与满意版本"}
         </button>
-      </div>
     </div>
   );
 }
