@@ -29,7 +29,7 @@ export function RecordTable({ items, selectedId, onSelect }: Props) {
               <td className="px-4 py-4 text-sm">{item.id}</td>
               <td className="px-4 py-4 text-sm text-ink/70">{item.counselor_id}</td>
               <td className="px-4 py-4 text-sm">
-                {item.rag_ready === "approved" ? "已记录" : "待补批注"}
+                {item.rag_ready === "approved" ? "已入库" : "未入库"}
               </td>
               <td className="px-4 py-4 text-sm text-ink/76">{item.user_input.slice(0, 72)}...</td>
               <td className="px-4 py-4 text-sm text-ink/60">

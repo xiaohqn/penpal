@@ -12,6 +12,7 @@ import {
   regenerateBatchSessionItem,
   rollbackBatchSessionItem,
   saveRecord,
+  setCurrentBatchSessionItem,
   updateRecord,
   updateBatchSessionItem,
 } from "./api";
@@ -86,6 +87,18 @@ export function useBatchSession(sessionId: number | null) {
     queryKey: ["batch-session", sessionId],
     queryFn: () => fetchBatchSession(sessionId as number),
     enabled: sessionId !== null,
+  });
+}
+
+export function useSetCurrentBatchSessionItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, itemId }: { sessionId: number; itemId: number }) =>
+      setCurrentBatchSessionItem(sessionId, itemId),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["batch-sessions"] });
+      void queryClient.setQueryData(["batch-session", data.id], data);
+    },
   });
 }
 

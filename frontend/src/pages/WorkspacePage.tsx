@@ -4,7 +4,6 @@ import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { useAuth } from "../app/auth";
 import { BatchExcelPanel } from "../components/BatchExcelPanel";
-import { ExpertAnnotationPanel } from "../components/ExpertAnnotationPanel";
 import { MailThreadContextPanel } from "../components/MailThreadContextPanel";
 import { PlannerInsightAccordion } from "../components/PlannerInsightAccordion";
 import { PolishingEditor } from "../components/PolishingEditor";
@@ -33,6 +32,7 @@ import {
   useRegenerateBatchSessionItem,
   useRollbackBatchSessionItem,
   useSaveRecord,
+  useSetCurrentBatchSessionItem,
   useUpdateBatchSessionItem,
 } from "../features/records/hooks";
 import type {
@@ -255,6 +255,7 @@ export function WorkspacePage() {
   } = useGenerationWorkspace();
   const saveRecord = useSaveRecord();
   const importBatchExcel = useImportBatchExcel();
+  const setCurrentBatchSessionItem = useSetCurrentBatchSessionItem();
   const updateBatchSessionItem = useUpdateBatchSessionItem();
   const regenerateBatchSessionItem = useRegenerateBatchSessionItem();
   const rollbackBatchSessionItem = useRollbackBatchSessionItem();
@@ -335,6 +336,14 @@ export function WorkspacePage() {
     currentBatchItem && isMailThreadContext(currentBatchItem.context_json)
       ? currentBatchItem.context_json
       : legacySplit?.context ?? null;
+
+  useEffect(() => {
+    if (!statusText) {
+      return;
+    }
+    const timer = window.setTimeout(() => setStatusText(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [statusText]);
 
   function buildTaskState(): WorkspaceTaskState {
     return {
@@ -626,13 +635,22 @@ export function WorkspacePage() {
     setBatchCurrentIndex(nextIndex);
   }
 
-  function handleSelectBatchRow(rowNumber: number) {
+  async function handleSelectBatchRow(rowNumber: number) {
     const index = visibleBatchItems.findIndex((item) => item.row_number === rowNumber);
     if (index >= 0) {
+      const item = visibleBatchItems[index];
       setWorkspaceMode(isMailBatchMode ? "mail_batch" : "excel_batch");
       setBatchDashboardOpen(false);
       setActiveRightTab("planner");
       goToBatchIndex(index);
+      try {
+        await setCurrentBatchSessionItem.mutateAsync({
+          sessionId: item.session_id,
+          itemId: item.id,
+        });
+      } catch (error) {
+        setStatusText(error instanceof Error ? error.message : "保存批量进度失败");
+      }
     }
   }
 
@@ -658,10 +676,6 @@ export function WorkspacePage() {
       response_versions: responseVersions,
       active_version_index: activeVersionIndex,
     };
-  }
-
-  function deriveRagReady() {
-    return expertAnnotation.trim() || sourceAnnotations.length > 0 ? "approved" : "pending";
   }
 
   async function handleGenerate() {
@@ -714,7 +728,7 @@ export function WorkspacePage() {
         ai_selected_raw_response: activeDraft.response,
         latest_response: polishedText,
         expert_annotation: expertAnnotation,
-        rag_ready: deriveRagReady(),
+        rag_ready: "approved",
         sample_reason: "",
         sample_tags: {},
         planner_labels: {},
@@ -768,7 +782,7 @@ export function WorkspacePage() {
       ai_selected_raw_response: activeDraft.response,
       expert_polished_response: polishedText,
       expert_annotation: expertAnnotation,
-      rag_ready: deriveRagReady(),
+      rag_ready: "approved",
       sample_reason: "",
       sample_tags: {},
       planner_labels: {},
@@ -959,7 +973,7 @@ export function WorkspacePage() {
             ai_selected_raw_response: activeDraft.response,
             latest_response: rewrittenText,
             expert_annotation: expertAnnotation,
-            rag_ready: deriveRagReady(),
+            rag_ready: "approved",
             sample_reason: "",
             sample_tags: {},
             planner_labels: {},
@@ -1160,13 +1174,13 @@ export function WorkspacePage() {
         />
 
         <div className="min-w-0 flex-1">
+        {statusText ? (
+          <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-line bg-white/92 px-4 py-2 text-sm text-ink/72 shadow-card backdrop-blur">
+            {statusText}
+          </div>
+        ) : null}
         {isWorkspaceBatchMode && batchDashboardOpen ? (
           <div className="mt-4 grid gap-4">
-            {statusText ? (
-              <div className="rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm leading-7 text-moss shadow-card">
-                {statusText}
-              </div>
-            ) : null}
             <BatchExcelPanel
               importing={importBatchExcel.isPending || batchSessions.isLoading}
               fileName={batchFileName}
@@ -1212,11 +1226,6 @@ export function WorkspacePage() {
           }`}
         >
           <div className="grid gap-4">
-            {statusText ? (
-              <div className="rounded-[20px] border border-line bg-white/72 px-4 py-3 text-sm leading-7 text-moss shadow-card">
-                {statusText}
-              </div>
-            ) : null}
             {jobError ? <p className="text-sm text-red-600">{jobError}</p> : null}
             {activeDraft?.error ? <p className="text-sm text-red-600">{activeDraft.error}</p> : null}
 
@@ -1303,10 +1312,6 @@ export function WorkspacePage() {
 
                   {activeRightTab === "revision" ? (
                     <div className="grid gap-3">
-                      <ExpertAnnotationPanel
-                        value={expertAnnotation}
-                        onChange={setExpertAnnotation}
-                      />
                       <ResponseVersionPanel
                         versions={responseVersions}
                         activeVersionIndex={activeVersionIndex}

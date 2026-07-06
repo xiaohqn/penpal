@@ -114,6 +114,12 @@ export function fetchBatchSession(sessionId: number) {
   return request<BatchSessionDetail>(`/batch/sessions/${sessionId}`);
 }
 
+export function setCurrentBatchSessionItem(sessionId: number, itemId: number) {
+  return request<BatchSessionDetail>(`/batch/sessions/${sessionId}/items/${itemId}/current`, {
+    method: "PATCH",
+  });
+}
+
 export async function updateBatchSessionItem(
   sessionId: number,
   itemId: number,

@@ -151,6 +151,25 @@ def get_batch_session(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.patch("/sessions/{session_id}/items/{item_id}/current", response_model=BatchSessionDetailResponse)
+def set_current_batch_session_item(
+    session_id: int,
+    item_id: int,
+    counselor_id: str = Depends(get_counselor_id),
+    db: Session = Depends(get_db_session),
+    batch_session_service: BatchSessionService = Depends(get_batch_session_service),
+) -> BatchSessionDetailResponse:
+    try:
+        return batch_session_service.set_current_item(
+            db=db,
+            session_id=session_id,
+            item_id=item_id,
+            counselor_id=counselor_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.put("/sessions/{session_id}/items/{item_id}", response_model=BatchSessionDetailResponse)
 def update_batch_session_item(
     session_id: int,

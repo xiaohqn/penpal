@@ -103,6 +103,7 @@ export function WorkspaceTaskSidebar({
   onLoadAssignedQueue,
 }: Props) {
   const [pendingOpen, setPendingOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<"single" | "batch">("single");
   const historyEntries: HistoryEntry[] = [
     ...tasks.map((task) => ({ kind: "task" as const, task })),
     ...batchSessions.map((session) => ({
@@ -111,8 +112,14 @@ export function WorkspaceTaskSidebar({
       mode: isMailBatchSession(session) ? ("mail_batch" as const) : ("excel_batch" as const),
     })),
   ].sort((a, b) => new Date(entryTime(b)).getTime() - new Date(entryTime(a)).getTime());
+  const visibleHistoryEntries = historyEntries.filter((entry) => {
+    if (activeTab === "batch") {
+      return entry.kind === "batch" && entry.mode === "excel_batch";
+    }
+    return entry.kind === "task" || (entry.kind === "batch" && entry.mode === "mail_batch");
+  });
 
-  const groups = historyEntries.reduce<Record<string, HistoryEntry[]>>((accumulator, entry) => {
+  const groups = visibleHistoryEntries.reduce<Record<string, HistoryEntry[]>>((accumulator, entry) => {
     const label = groupLabel(entryTime(entry));
     accumulator[label] = [...(accumulator[label] ?? []), entry];
     return accumulator;
@@ -134,12 +141,12 @@ export function WorkspaceTaskSidebar({
 
   return (
     <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[300px] shrink-0 flex-col overflow-hidden rounded-[24px] border border-line bg-white/84 shadow-card xl:flex">
-      <div className="border-b border-line/70 bg-paper/62 p-3">
+      <div className="max-w-full overflow-hidden border-b border-line/70 bg-paper/62 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <img src={logoSrc} alt="心灵笔友" className="h-10 w-12 shrink-0 object-contain mix-blend-multiply" />
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <img src={logoSrc} alt="心灵笔友" className="h-8 w-10 shrink-0 object-contain mix-blend-multiply" />
             <div className="min-w-0">
-              <h2 className="truncate font-serif text-lg text-ink">心灵笔友</h2>
+              <h2 className="truncate font-serif text-base text-ink">心灵笔友</h2>
               <p className="truncate text-xs text-ink/52">{counselorLabel}</p>
             </div>
           </div>
@@ -148,58 +155,78 @@ export function WorkspaceTaskSidebar({
           </button>
         </div>
 
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={onNewSingle}
-            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-amber px-3 py-2 text-sm font-medium text-white"
-          >
-            <Plus size={16} />
-            新建
-          </button>
-          <label
-            title="上传 Excel 批量任务"
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-line bg-white/76 text-ink transition hover:bg-white"
-          >
-            <Upload size={16} />
-            <span className="sr-only">{importingExcel ? "上传中" : "上传 Excel 批量任务"}</span>
-            <input
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  onUploadExcel(file);
-                  event.target.value = "";
-                }
-              }}
-            />
-          </label>
+        <div className="mt-2">
+          {activeTab === "single" ? (
+            <button
+              type="button"
+              onClick={onNewSingle}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-amber px-3 py-1.5 text-sm font-medium text-white"
+            >
+              <Plus size={16} />
+              新建
+            </button>
+          ) : (
+            <label
+              title="上传 Excel 批量任务"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-amber px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-92"
+            >
+              <Upload size={16} />
+              {importingExcel ? "上传中" : "上传 Excel"}
+              <input
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    onUploadExcel(file);
+                    event.target.value = "";
+                  }
+                }}
+              />
+            </label>
+          )}
+          <div className="mt-2 grid grid-cols-2 rounded-full border border-line bg-white/62 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("single")}
+              className={`rounded-full px-2 py-1.5 transition ${activeTab === "single" ? "bg-white text-ink shadow-card" : "text-ink/48 hover:text-ink"}`}
+            >
+              单封信件
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("batch")}
+              className={`rounded-full px-2 py-1.5 transition ${activeTab === "batch" ? "bg-white text-ink shadow-card" : "text-ink/48 hover:text-ink"}`}
+            >
+              批量任务
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-        <section className="mb-4 rounded-[18px] border border-line bg-white/72 shadow-[0_10px_28px_rgba(55,63,78,0.06)]">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {activeTab === "single" ? (
+        <section className="mb-3 max-w-full overflow-hidden rounded-[16px] border border-line bg-white/72 shadow-[0_10px_28px_rgba(55,63,78,0.06)]">
           <button
             type="button"
             onClick={() => setPendingOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
           >
-            <span className="inline-flex items-center gap-2 text-sm font-medium text-ink">
-              <Inbox size={16} />
+            <span className="inline-flex items-center gap-2 text-[13px] font-medium text-ink">
+              <Inbox size={15} />
               人工指派任务
               <span className="rounded-full bg-amber px-2 py-0.5 text-xs text-white">{assignedThreads.length}</span>
             </span>
             {pendingOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
           {pendingOpen ? (
-            <div className="border-t border-line/70 p-2">
+            <div className="border-t border-line/70 p-1.5">
               <button
                 type="button"
                 onClick={onLoadAssignedQueue}
                 disabled={loadingAssigned}
-                className="mb-2 w-full rounded-full border border-line bg-paper/72 px-3 py-1.5 text-xs text-ink transition disabled:opacity-50"
+                className="mb-1.5 w-full rounded-full border border-line bg-paper/72 px-3 py-1 text-xs text-ink transition disabled:opacity-50"
               >
                 {loadingAssigned ? "载入中..." : "载入全部待办"}
               </button>
@@ -210,16 +237,16 @@ export function WorkspaceTaskSidebar({
                       key={thread.id}
                       type="button"
                       onClick={() => onSelectAssignedThread(thread)}
-                      className="rounded-[14px] border border-line bg-white/70 px-3 py-2 text-left transition hover:border-amber/50 hover:bg-paper/72"
+                      className="w-full max-w-full overflow-hidden rounded-[13px] border border-line bg-white/70 px-2.5 py-1.5 text-left transition hover:border-amber/50 hover:bg-paper/72"
                     >
                       <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="inline-flex min-w-0 items-center gap-1 text-xs text-ink/58">
+                        <span className="inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[11px] text-ink/58">
                           <Mail size={13} />
                           <span className="truncate">{thread.signature || thread.user_id}</span>
                         </span>
                         <span className="rounded-full bg-mist px-2 py-0.5 text-[11px] text-ink/62">待回复</span>
                       </div>
-                      <p className="truncate text-sm leading-5 text-ink">{latestUserMessage(thread)}</p>
+                      <p className="truncate text-[13px] leading-5 text-ink">{latestUserMessage(thread)}</p>
                     </button>
                   ))}
                 </div>
@@ -229,14 +256,17 @@ export function WorkspaceTaskSidebar({
             </div>
           ) : null}
         </section>
+        ) : null}
 
         <section>
-          <p className="mb-1 px-2 text-[11px] uppercase tracking-[0.16em] text-ink/34">历史记录与批量任务</p>
+          <p className="mb-1.5 px-2 text-xs font-medium text-ink/48">
+            {activeTab === "single" ? "单封历史" : "Excel 批量任务"}
+          </p>
           {["今天", "昨天", "过去 7 天", "更早"].map((label) =>
             groups[label]?.length ? (
-              <div key={label} className="mb-3">
-                <p className="mb-1 px-2 text-[11px] text-ink/32">{label}</p>
-                <div className="grid gap-0.5">
+              <div key={label} className="mb-2.5">
+                <p className="mb-1 px-2 text-[11px] text-ink/38">{label}</p>
+                <div className="grid gap-1.5">
                   {groups[label].map((entry) => {
                     const active =
                       entry.kind === "task"
@@ -251,17 +281,22 @@ export function WorkspaceTaskSidebar({
                         onClick={() =>
                           entry.kind === "task" ? onSelectTask(entry.task) : onSelectBatch(entry.session, entry.mode)
                         }
-                        className={`flex w-full items-center gap-2 rounded-[10px] px-2 py-2 text-left transition ${
-                          active ? "bg-peach/28 text-ink" : "text-ink/72 hover:bg-paper/72"
+                        className={`w-full max-w-full overflow-hidden rounded-[14px] border px-2 py-2 text-left transition ${
+                          active ? "border-amber bg-peach/22 shadow-card" : "border-line bg-white/66 hover:bg-paper/72"
                         }`}
                       >
-                        {Icon ? <Icon size={14} className="shrink-0 text-ink/42" /> : <span className="w-3.5 shrink-0" />}
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(status)}`} title={statusLabel(status)} />
-                        <span className="min-w-0 flex-1 truncate text-sm">
-                          <span className={active ? "font-medium" : ""}>{entryTitle(entry)}</span>
-                          <span className="text-ink/36"> · {statusLabel(status)}</span>
-                          <span className="text-ink/36"> · {entrySummary(entry)}</span>
-                        </span>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] text-ink/58">
+                            {Icon ? <Icon size={14} className="shrink-0" /> : null}
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(status)}`} />
+                            <span className="truncate">
+                              {entry.kind === "batch" ? (entry.mode === "mail_batch" ? "批量/人工" : "批量/Excel") : "单封"}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-full bg-mist px-1.5 py-0.5 text-[10px] text-ink/60">{statusLabel(status)}</span>
+                        </div>
+                        <p className="truncate text-[13px] font-medium leading-5 text-ink">{entryTitle(entry)}</p>
+                        <p className="mt-0.5 truncate text-[11px] leading-4 text-ink/52">{entrySummary(entry)}</p>
                       </button>
                     );
                   })}
@@ -271,13 +306,13 @@ export function WorkspaceTaskSidebar({
           )}
         </section>
       </div>
-      <div className="border-t border-line/80 bg-white/72 p-3">
+      <div className="border-t border-line/80 bg-white/72 p-2.5">
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-[18px] px-3 py-2 text-left transition hover:bg-paper/75"
+          className="flex w-full items-center gap-2 rounded-[16px] px-2.5 py-1.5 text-left transition hover:bg-paper/75"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mist text-sm font-medium text-ink">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mist text-sm font-medium text-ink">
             {counselorLabel.slice(0, 1).toUpperCase()}
           </span>
           <span className="min-w-0 flex-1">

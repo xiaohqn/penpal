@@ -17,9 +17,7 @@ class RecordService:
         self.rag_service = rag_service or RagService()
 
     def _derive_rag_ready(self, payload: ConsultationRecordSaveRequest) -> str:
-        if payload.expert_annotation.strip() or payload.source_annotations:
-            return "approved"
-        return "pending"
+        return "approved"
 
     def create_record(
         self,

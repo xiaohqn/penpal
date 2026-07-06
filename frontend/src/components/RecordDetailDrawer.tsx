@@ -37,9 +37,9 @@ function parseJsonObject(value: string, fieldName: string) {
 }
 
 function ragReadyLabel(value: string) {
-  if (value === "approved") return "进入 RAG 素材库";
-  if (value === "rejected") return "不进入 RAG 素材库";
-  return "待判断";
+  if (value === "approved") return "已入库";
+  if (value === "rejected") return "不入库";
+  return "未入库";
 }
 
 export function RecordDetailDrawer({ record, onSave, saving = false }: Props) {
@@ -132,7 +132,7 @@ export function RecordDetailDrawer({ record, onSave, saving = false }: Props) {
             <textarea
               value={expertAnnotation}
               onChange={(event) => setExpertAnnotation(event.target.value)}
-              placeholder="补写专家判断、修改依据，或说明是否建议进入 RAG。"
+              placeholder="可选：补写专家判断或修改依据。"
               className="min-h-[110px] w-full resize-y rounded-2xl border border-line bg-white/78 px-3 py-2 text-sm leading-7 text-ink outline-none focus:border-amber"
             />
           </EditableBlock>
@@ -152,15 +152,15 @@ export function RecordDetailDrawer({ record, onSave, saving = false }: Props) {
                 onChange={(event) => setRagReady(event.target.value)}
                 className="rounded-2xl border border-line bg-white/78 px-3 py-2 text-sm text-ink outline-none focus:border-amber"
               >
-                <option value="pending">待判断</option>
-                <option value="approved">进入 RAG 素材库</option>
-                <option value="rejected">不进入 RAG 素材库</option>
+                <option value="pending">未入库</option>
+                <option value="approved">已入库</option>
+                <option value="rejected">不入库</option>
               </select>
               <p className="text-xs text-ink/52">当前：{ragReadyLabel(ragReady)}</p>
               <textarea
                 value={sampleReason}
                 onChange={(event) => setSampleReason(event.target.value)}
-                placeholder="可选：说明为什么适合或不适合进入 RAG 素材库。"
+                placeholder="可选：补充备注。"
                 className="min-h-[78px] w-full resize-y rounded-2xl border border-line bg-white/78 px-3 py-2 text-sm leading-7 text-ink outline-none focus:border-amber"
               />
             </div>

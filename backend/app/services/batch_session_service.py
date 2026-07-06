@@ -32,9 +32,7 @@ class BatchSessionService:
         expert_annotation: str,
         source_annotations: list[dict[str, Any]],
     ) -> str:
-        if expert_annotation.strip() or source_annotations:
-            return "approved"
-        return "pending"
+        return "approved"
 
     def create_session(
         self,
@@ -131,6 +129,63 @@ class BatchSessionService:
             updated_at=session.updated_at,
             items=[self._to_item_detail(item) for item in session.items],
         )
+
+    def find_mail_thread_session(
+        self,
+        db: Session,
+        mail_thread_id: int,
+        counselor_id: str = "default",
+    ) -> BatchSessionDetailResponse | None:
+        item = db.scalar(
+            select(BatchSessionItem)
+            .join(BatchSession)
+            .where(
+                BatchSession.counselor_id == counselor_id,
+                BatchSession.source_file_name.in_(["assigned-mail-thread", "assigned-mail-threads"]),
+                BatchSessionItem.mail_thread_id == mail_thread_id,
+            )
+            .order_by(desc(BatchSession.updated_at), desc(BatchSessionItem.updated_at))
+        )
+        if item is None:
+            return None
+        return self.get_session_detail(db, item.session_id, counselor_id=counselor_id)
+
+    def find_assigned_threads_session(
+        self,
+        db: Session,
+        mail_thread_ids: list[int],
+        counselor_id: str = "default",
+    ) -> BatchSessionDetailResponse | None:
+        if not mail_thread_ids:
+            return None
+        item = db.scalar(
+            select(BatchSessionItem)
+            .join(BatchSession)
+            .where(
+                BatchSession.counselor_id == counselor_id,
+                BatchSession.source_file_name == "assigned-mail-threads",
+                BatchSessionItem.mail_thread_id.in_(mail_thread_ids),
+            )
+            .order_by(desc(BatchSession.updated_at), desc(BatchSessionItem.updated_at))
+        )
+        if item is None:
+            return None
+        return self.get_session_detail(db, item.session_id, counselor_id=counselor_id)
+
+    def set_current_item(
+        self,
+        db: Session,
+        session_id: int,
+        item_id: int,
+        counselor_id: str = "default",
+    ) -> BatchSessionDetailResponse:
+        item = self._get_item(db, session_id, item_id, counselor_id=counselor_id)
+        session = db.get(BatchSession, item.session_id)
+        if session is None:
+            raise ValueError("Batch session not found")
+        session.current_item_id = item.id
+        db.commit()
+        return self.get_session_detail(db, session_id, counselor_id=counselor_id)
 
     def update_item(
         self,

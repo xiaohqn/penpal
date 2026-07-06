@@ -54,7 +54,7 @@ export function UserLetterPanel({
           placeholder="输入来信内容"
           readOnly={readOnly}
           rows={rows}
-          className="w-full resize-y rounded-[20px] border border-transparent bg-paper/75 px-4 py-3 pb-16 text-sm leading-7 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)] read-only:bg-mist/45"
+          className="w-full resize-y rounded-[20px] border border-transparent bg-paper/75 px-4 py-3 pb-16 text-[15px] leading-8 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)] read-only:bg-mist/45"
         />
         {onGenerate ? (
           <div className="absolute bottom-3 right-3 flex items-center gap-2">

@@ -79,6 +79,13 @@ def create_assigned_mail_threads_workspace_session(
     pending_threads = [thread for thread in threads if thread.status in {"waiting_counselor", "crisis"}]
     if not pending_threads:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending assigned letters")
+    existing_session = batch_session_service.find_assigned_threads_session(
+        db=db,
+        counselor_id=counselor_id,
+        mail_thread_ids=[thread.id for thread in pending_threads],
+    )
+    if existing_session is not None:
+        return existing_session
     return batch_session_service.create_session(
         db=db,
         counselor_id=counselor_id,
@@ -109,6 +116,13 @@ def create_assigned_mail_thread_workspace_session(
     thread = mail_thread_service.get_assigned_thread(db=db, counselor_id=counselor_id, thread_id=thread_id)
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned thread not found")
+    existing_session = batch_session_service.find_mail_thread_session(
+        db=db,
+        counselor_id=counselor_id,
+        mail_thread_id=thread.id,
+    )
+    if existing_session is not None:
+        return existing_session
     return batch_session_service.create_session(
         db=db,
         counselor_id=counselor_id,
