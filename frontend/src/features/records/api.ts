@@ -62,7 +62,6 @@ export async function exportBatchGeneration(items: BatchExcelItem[]) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
       "X-Counselor-Id": getStoredCounselorId(),
       ...getAuthHeaders(),
     },
@@ -80,6 +79,7 @@ export async function exportRecordsExcel(scope: "mine" | "all" = "mine") {
   const response = await fetch(buildApiUrl(`/api/v1/batch/records/export?scope=${scope}`), {
     headers: {
       "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
   });
   if (!response.ok) {
@@ -174,6 +174,7 @@ export async function rollbackBatchSessionItem(
     headers: {
       "Content-Type": "application/json",
       "X-Counselor-Id": getStoredCounselorId(),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ version_index: versionIndex }),
   });

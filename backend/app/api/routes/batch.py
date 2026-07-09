@@ -117,8 +117,10 @@ def export_records_excel(
 @router.post("/reviewed/export")
 def export_reviewed_batch_excel(
     payload: ReviewedBatchExportRequest,
+    counselor_id: str = Depends(get_counselor_id),
     excel_service: ExcelService = Depends(get_excel_service),
 ) -> Response:
+    _ = counselor_id
     content = excel_service.export_reviewed_batch_excel(
         [item.model_dump() for item in payload.items]
     )
@@ -191,6 +193,19 @@ def update_batch_session_item(
             )
         )
         was_completed = previous_item.status == "completed" if previous_item is not None else False
+        if (
+            payload.status == "completed"
+            and payload.mail_thread_id
+            and not was_completed
+            and payload.latest_response.strip()
+            and mail_thread_service.get_assigned_thread(
+                db=db,
+                counselor_id=counselor_id,
+                thread_id=payload.mail_thread_id,
+            )
+            is None
+        ):
+            raise ValueError("Assigned mail thread was not found or is no longer assigned to this counselor")
         detail = batch_session_service.update_item(
             db=db,
             session_id=session_id,
@@ -207,12 +222,14 @@ def update_batch_session_item(
             and payload.latest_response.strip()
         )
         if should_send_reply:
-            mail_thread_service.submit_counselor_reply_text(
+            reply = mail_thread_service.submit_counselor_reply_text(
                 db=db,
                 counselor_id=counselor_id,
                 thread_id=updated_item.mail_thread_id,
                 content=payload.latest_response.strip(),
             )
+            if reply is None:
+                raise ValueError("Assigned mail thread was not found or is no longer assigned to this counselor")
         return detail
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

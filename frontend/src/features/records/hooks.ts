@@ -116,6 +116,7 @@ export function useUpdateBatchSessionItem() {
     }) => updateBatchSessionItem(sessionId, itemId, payload),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["batch-sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["assigned-mail-threads"] });
       void queryClient.setQueryData(["batch-session", data.id], data);
     },
   });

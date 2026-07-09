@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { useAuth } from "../app/auth";
@@ -336,6 +336,11 @@ export function WorkspacePage() {
     currentBatchItem && isMailThreadContext(currentBatchItem.context_json)
       ? currentBatchItem.context_json
       : legacySplit?.context ?? null;
+  const activeBatchItemIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    activeBatchItemIdRef.current = currentBatchItem?.id ?? null;
+  }, [currentBatchItem?.id]);
 
   useEffect(() => {
     if (!statusText) {
@@ -920,6 +925,7 @@ export function WorkspacePage() {
     }
 
     try {
+      const batchItemIdAtStart = currentBatchItem?.id ?? null;
       setStatusText("正在局部改写高亮批注片段，未批注部分会保持不变。");
       const rewriteResult = await rewriteAnnotatedFragments({
         current_response: polishedText,
@@ -929,6 +935,9 @@ export function WorkspacePage() {
         source_mode: "auto",
         use_deep_thinking: useDeepThinking,
       });
+      if (batchItemIdAtStart !== null && activeBatchItemIdRef.current !== batchItemIdAtStart) {
+        return;
+      }
       const rewrittenText = applyAnnotationRevisions(polishedText, sourceAnnotations, rewriteResult.revisions);
       const existingVersions =
         responseVersions.length > 0
@@ -995,7 +1004,7 @@ export function WorkspacePage() {
           },
         });
         const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
-        if (updatedItem) {
+        if (updatedItem && activeBatchItemIdRef.current === batchItemIdAtStart) {
           setResponseVersions(updatedItem.response_versions_json ?? [...existingVersions, nextVersion]);
           setActiveVersionIndex(updatedItem.active_version_index ?? nextVersion.version_index);
           setPolishedText(updatedItem.latest_response ?? rewrittenText);
@@ -1049,6 +1058,9 @@ export function WorkspacePage() {
           use_deep_thinking: useDeepThinking,
         },
       });
+      if (activeBatchItemIdRef.current !== currentBatchItem.id) {
+        return;
+      }
       const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
       if (updatedItem) {
         hydrateWorkspace({
@@ -1126,11 +1138,15 @@ export function WorkspacePage() {
       return;
     }
     try {
+      const batchItemIdAtStart = currentBatchItem.id;
       const detail = await rollbackBatchSessionItem.mutateAsync({
         sessionId: currentBatchItem.session_id as number,
         itemId: currentBatchItem.id as number,
         versionIndex,
       });
+      if (activeBatchItemIdRef.current !== batchItemIdAtStart) {
+        return;
+      }
       const updatedItem = detail.items.find((item) => item.id === currentBatchItem.id);
       if (updatedItem) {
         setResponseVersions(updatedItem.response_versions_json ?? []);

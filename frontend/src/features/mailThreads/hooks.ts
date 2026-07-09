@@ -93,13 +93,23 @@ export function useSubmitCounselorThreadReply() {
 }
 
 export function useCreateAssignedThreadWorkspaceSession() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (threadId: number) => createAssignedThreadWorkspaceSession(threadId),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["batch-sessions"] });
+      void queryClient.setQueryData(["batch-session", data.id], data);
+    },
   });
 }
 
 export function useCreateAssignedThreadsWorkspaceSession() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createAssignedThreadsWorkspaceSession,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["batch-sessions"] });
+      void queryClient.setQueryData(["batch-session", data.id], data);
+    },
   });
 }

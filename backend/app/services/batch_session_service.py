@@ -148,6 +148,11 @@ class BatchSessionService:
         )
         if item is None:
             return None
+        session = db.get(BatchSession, item.session_id)
+        if session is None:
+            return None
+        session.current_item_id = item.id
+        db.commit()
         return self.get_session_detail(db, item.session_id, counselor_id=counselor_id)
 
     def find_assigned_threads_session(
@@ -158,19 +163,21 @@ class BatchSessionService:
     ) -> BatchSessionDetailResponse | None:
         if not mail_thread_ids:
             return None
-        item = db.scalar(
-            select(BatchSessionItem)
-            .join(BatchSession)
+        expected_thread_ids = set(mail_thread_ids)
+        sessions = db.scalars(
+            select(BatchSession)
+            .options(selectinload(BatchSession.items))
             .where(
                 BatchSession.counselor_id == counselor_id,
                 BatchSession.source_file_name == "assigned-mail-threads",
-                BatchSessionItem.mail_thread_id.in_(mail_thread_ids),
             )
-            .order_by(desc(BatchSession.updated_at), desc(BatchSessionItem.updated_at))
-        )
-        if item is None:
-            return None
-        return self.get_session_detail(db, item.session_id, counselor_id=counselor_id)
+            .order_by(desc(BatchSession.updated_at))
+        ).unique().all()
+        for session in sessions:
+            session_thread_ids = {item.mail_thread_id for item in session.items if item.mail_thread_id is not None}
+            if session_thread_ids == expected_thread_ids:
+                return self.get_session_detail(db, session.id, counselor_id=counselor_id)
+        return None
 
     def set_current_item(
         self,
