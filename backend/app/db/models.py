@@ -59,6 +59,7 @@ class ConsultationRecord(Base):
     sample_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     source_annotations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     response_versions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    workspace_task_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
     batch_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     batch_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -68,6 +69,26 @@ class ConsultationRecord(Base):
         onupdate=utcnow,
         nullable=False,
     )
+
+
+class ResearchEvent(Base):
+    """Append-only interaction log used for internal research exports."""
+
+    __tablename__ = "research_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    counselor_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    workspace_task_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    batch_session_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    batch_item_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    record_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    before_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    after_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    diff_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    annotations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class BatchSession(Base):

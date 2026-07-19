@@ -9,6 +9,7 @@ type Props = {
   annotations?: SourceAnnotation[];
   onAddAnnotation?: ((annotation: SourceAnnotation) => void) | null;
   onRemoveAnnotation?: ((annotationId: string) => void) | null;
+  onBlur?: (() => void) | null;
 };
 
 export function PolishingEditor({
@@ -17,6 +18,7 @@ export function PolishingEditor({
   annotations = [],
   onAddAnnotation = null,
   onRemoveAnnotation = null,
+  onBlur = null,
 }: Props) {
   const [annotationNote, setAnnotationNote] = useState("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; quote: string } | null>(null);
@@ -62,6 +64,7 @@ export function PolishingEditor({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onSelect={handleSelection}
+        onBlur={() => onBlur?.()}
         placeholder="生成草稿后，这里会自动带入内容，供继续润色。"
         className="min-h-[520px] w-full rounded-[20px] border border-transparent bg-paper/72 px-5 py-4 text-[15px] leading-8 text-ink outline-none transition focus:border-amber focus:bg-white focus:shadow-[0_0_0_4px_rgba(79,110,140,0.14)]"
       />

@@ -13,6 +13,7 @@ from app.services.generator_service import GeneratorService
 from app.services.planner_service import PlannerService
 from app.services.rag_service import RagService
 from app.services.safety_service import RISK_ORDER, SafetyService
+from app.utils.style_guards import find_generic_empathy_phrase
 
 RAG_REFERENCE_LIMIT = 2
 logger = logging.getLogger("uvicorn.error")
@@ -379,6 +380,9 @@ class OrchestrationService:
                     "专家批注是硬性修改要求，不是参考意见；必须逐条落实到 revised_text 里。"
                     "除非批注明确要求“不改”，否则 revised_text 不得与原片段完全相同，也不得只替换一两个无关虚词。"
                     "如果批注要求补充建议、缩短、增强共情、减少复述或改变语气，你必须让替换文本出现可见变化。"
+                    "禁止使用泛化式共情：不得用‘任谁、换谁、任何人、谁遇到这种事/情况’等泛指主体，"
+                    "再接‘都会、都很难、都无法、都受不了、都会觉得、都会感到’等普遍化情绪判断。"
+                    "例如‘换谁做都很憋屈’‘任谁都很难接受’都禁止；必须贴着当前来信的具体处境表达。"
                     "每个 revised_text 必须能直接替换原片段；长度尽量贴近批注要求，不能把完整回信塞进一个片段。"
                     "不要加编号、解释、Markdown 或引号。"
                     '只输出 JSON：{"revisions":[{"id":"批注 id","revised_text":"替换文本"}]}'
@@ -395,19 +399,49 @@ class OrchestrationService:
                 ),
             },
         ]
-        raw = await self.generator_service.generate_raw_with_mode(
-            messages=messages,
-            mode=target["mode"],
-            temperature=0.35,
-            audience="counselor",
-            use_deep_thinking=use_deep_thinking,
-        )
         from app.utils.json_parse import safe_json_parse
 
-        parsed = safe_json_parse(raw) or {}
-        revisions = parsed.get("revisions")
-        if not isinstance(revisions, list):
-            raise ValueError("局部批注改写没有返回有效 revisions")
+        raw = ""
+        revisions: list[dict[str, Any]] | None = None
+        for attempt in range(2):
+            raw = await self.generator_service.generate_raw_with_mode(
+                messages=messages,
+                mode=target["mode"],
+                temperature=0.35 if attempt == 0 else 0.2,
+                audience="counselor",
+                use_deep_thinking=use_deep_thinking,
+            )
+            parsed = safe_json_parse(raw) or {}
+            candidate_revisions = parsed.get("revisions")
+            if not isinstance(candidate_revisions, list):
+                raise ValueError("局部批注改写没有返回有效 revisions")
+            violation = next(
+                (
+                    phrase
+                    for item in candidate_revisions
+                    if isinstance(item, dict)
+                    for phrase in [find_generic_empathy_phrase(str(item.get("revised_text", "")))]
+                    if phrase
+                ),
+                None,
+            )
+            if not violation:
+                revisions = candidate_revisions
+                break
+            messages = [
+                *messages,
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": (
+                        f"上次结果包含禁止的泛化共情表达“{violation}”。请重新输出全部 revisions，"
+                        "删除这类‘任谁/换谁/任何人……都……’判断，改为只描述来信者的具体处境。"
+                        "仍然只输出规定的 JSON。"
+                    ),
+                },
+            ]
+        if revisions is None:
+            raise ValueError("局部批注改写连续出现泛化共情表达，请调整批注后重试")
         return {"revisions": revisions, "raw": raw}
 
     def _review_draft_response(self, response: str) -> dict[str, Any]:

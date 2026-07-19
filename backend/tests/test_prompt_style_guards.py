@@ -1,5 +1,6 @@
 from app.prompts.generator_prompt import build_generator_system_prompt
 from app.prompts.planner_prompt import build_planner_system_prompt
+from app.services.rag_service import is_usable_rag_response
 
 
 STYLE_SUMMARY = {
@@ -24,6 +25,9 @@ def test_generator_prompt_bans_generic_empathy_phrases():
 
     assert "换谁都会这样" in prompt
     assert "换谁都会难受" in prompt
+    assert "任谁都很难接受" in prompt
+    assert "谁遇到这种情况都无法平静" in prompt
+    assert "不要只避开示例原句后换一个同义说法" in prompt
     assert "泛化式共情句" in prompt
     assert "贴着来信细节" in prompt
 
@@ -33,5 +37,13 @@ def test_planner_prompt_keeps_generic_empathy_out_of_plan():
 
     assert "换谁都会这样" in prompt
     assert "换谁都会难受" in prompt
+    assert "任谁都很难接受" in prompt
+    assert "谁遇到这种情况都无法平静" in prompt
     assert "泛化共情句" in prompt
     assert "来信细节" in prompt
+
+
+def test_rag_rejects_generic_empathy_variants():
+    assert not is_usable_rag_response("任谁都很难接受这样的变化。")
+    assert not is_usable_rag_response("谁遇到这种情况都无法平静。")
+    assert is_usable_rag_response("四个月里既被孤立又得不到父母理解，这几层压力一直叠在一起。")

@@ -15,6 +15,9 @@ export type WorkspaceTaskState = {
   responseVersions?: ResponseVersion[];
   responseEvaluation?: ResponseEvaluation;
   activeVersionIndex?: number;
+  initialAiResponse?: string;
+  initialPlannerOutput?: PlannerOutput | null;
+  finalizationMode?: string;
   plannerOutput?: PlannerOutput;
   useDeepThinking?: boolean;
   activeRightTab?: string;

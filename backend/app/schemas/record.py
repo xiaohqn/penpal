@@ -22,6 +22,7 @@ class ConsultationRecordSaveRequest(BaseModel):
     sample_snapshot: dict[str, Any] = Field(default_factory=dict)
     source_annotations: list[dict[str, Any]] = Field(default_factory=list)
     response_versions: list[dict[str, Any]] = Field(default_factory=list)
+    workspace_task_id: int | None = None
     batch_session_id: int | None = None
     batch_item_id: int | None = None
 
@@ -69,6 +70,7 @@ class ConsultationRecordResponse(BaseModel):
     sample_snapshot_json: dict[str, Any]
     source_annotations_json: list[dict[str, Any]]
     response_versions_json: list[dict[str, Any]]
+    workspace_task_id: int | None
     batch_session_id: int | None
     batch_item_id: int | None
     created_at: datetime

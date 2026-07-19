@@ -15,6 +15,7 @@ from app.services.user_letter_service import UserLetterService
 from app.services.mail_thread_service import MailThreadService
 from app.services.safety_service import SafetyService
 from app.services.workspace_task_service import WorkspaceTaskService
+from app.services.research_event_service import ResearchEventService
 
 
 def get_settings(request: Request) -> Settings:
@@ -76,3 +77,7 @@ def get_safety_service(request: Request) -> SafetyService:
 
 def get_workspace_task_service(request: Request) -> WorkspaceTaskService:
     return request.app.state.workspace_task_service
+
+
+def get_research_event_service(request: Request) -> ResearchEventService:
+    return request.app.state.research_event_service

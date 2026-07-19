@@ -93,6 +93,7 @@ export type SaveRecordPayload = {
   evaluation?: ResponseEvaluation;
   source_annotations?: SourceAnnotation[];
   response_versions?: ResponseVersion[];
+  workspace_task_id?: number | null;
   batch_session_id?: number | null;
   batch_item_id?: number | null;
 };
@@ -159,6 +160,8 @@ export type SourceAnnotation = {
   quote: string;
   note: string;
   color: string;
+  target_version_index?: number;
+  target_response_hash?: string;
 };
 
 export type ResponseVersion = {
@@ -170,6 +173,9 @@ export type ResponseVersion = {
   source: string;
   source_annotations: SourceAnnotation[];
   safety_review?: Record<string, unknown>;
+  planner_before?: Record<string, unknown>;
+  planner_after?: Record<string, unknown>;
+  target_response_hash?: string;
 };
 
 export type MailThreadWorkspaceContext = {

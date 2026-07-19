@@ -29,6 +29,20 @@ TAG_KEYWORDS = {
     "安全风险": ("自杀", "轻生", "自残", "伤害自己", "不想活", "扛不住"),
 }
 
+# Do not feed known generic-empathy phrases back to the model as positive examples.
+FORBIDDEN_RAG_PHRASES = (
+    "任谁都",
+    "换谁都会",
+    "任何人遇到这种事都会",
+    "谁遇到这种事都",
+    "谁遇到这种情况都",
+    "这很正常",
+)
+
+
+def is_usable_rag_response(response: str) -> bool:
+    return bool(response.strip()) and not any(phrase in response for phrase in FORBIDDEN_RAG_PHRASES)
+
 
 @dataclass(frozen=True)
 class RetrievedSample:
@@ -130,7 +144,7 @@ class RagService:
 
         samples: list[RetrievedSample] = []
         for record in records:
-            if not record.expert_polished_response.strip():
+            if not is_usable_rag_response(record.expert_polished_response):
                 continue
             record_tags = record.sample_tags_json or {}
             record_labels = record.planner_labels_json or {}
@@ -227,7 +241,7 @@ class RagService:
                 continue
             user_input = str(item.get("send_content", "")).strip()
             response = str(item.get("reply_content", "")).strip()
-            if not user_input or not response:
+            if not user_input or not is_usable_rag_response(response):
                 continue
             pseudo_planner = {
                 "core_issue": self._infer_seed_core_issue(user_input),

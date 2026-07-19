@@ -32,6 +32,8 @@ from app.services.excel_service import ExcelService
 from app.services.mail_thread_service import MailThreadService
 from app.services.orchestration_service import OrchestrationService
 from app.services.record_service import RecordService
+from app.services.research_event_service import ResearchEventService
+from app.schemas.research import ResearchEventCreate
 
 router = APIRouter(prefix="/batch", tags=["batch"])
 
@@ -245,13 +247,23 @@ def rollback_batch_session_item(
     batch_session_service: BatchSessionService = Depends(get_batch_session_service),
 ) -> BatchSessionDetailResponse:
     try:
-        return batch_session_service.rollback_item_version(
+        before_detail = batch_session_service.get_session_detail(db, session_id, counselor_id)
+        before_item = next(item for item in before_detail.items if item.id == item_id)
+        result = batch_session_service.rollback_item_version(
             db=db,
             session_id=session_id,
             item_id=item_id,
             version_index=payload.version_index,
             counselor_id=counselor_id,
         )
+        after_item = next(item for item in result.items if item.id == item_id)
+        ResearchEventService().create(db, counselor_id, ResearchEventCreate(
+            event_type="version_rollback", batch_session_id=session_id, batch_item_id=item_id,
+            record_id=after_item.record_id, before_text=before_item.latest_response,
+            after_text=after_item.latest_response, annotations=after_item.source_annotations_json,
+            metadata={"target_version_index": payload.version_index},
+        ))
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -300,16 +312,18 @@ async def regenerate_batch_session_item(
     existing_versions = list(item.response_versions_json or [])
     version = {
         "version_index": len(existing_versions),
-        "label": f"批注重生成 v{len(existing_versions) + 1}",
+        "label": f"Planner 重生成 v{len(existing_versions) + 1}",
         "response": selected_draft["response"],
         "selected_persona_name": payload.selected_persona_name,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "source": "annotation_regenerate",
+        "source": "planner_regenerate",
         "source_annotations": [annotation.model_dump() for annotation in payload.source_annotations],
+        "planner_before": item.planner_output_json or {},
+        "planner_after": payload.planner_output or selected_draft.get("planner_output", {}),
         "safety_review": selected_draft.get("safety_review", {}),
     }
 
-    return batch_session_service.append_response_version(
+    result = batch_session_service.append_response_version(
         db=db,
         session_id=session_id,
         item_id=item_id,
@@ -317,7 +331,7 @@ async def regenerate_batch_session_item(
         latest_response=selected_draft["response"],
         planner_output=selected_draft.get("planner_output", {}),
         drafts=drafts,
-        ai_selected_raw_response=selected_draft.get("raw_response", ""),
+        ai_selected_raw_response=item.ai_selected_raw_response or selected_draft.get("raw_response", ""),
         selected_persona_name=selected_draft["persona_name"],
         selected_persona_names=payload.selected_persona_names or [payload.selected_persona_name],
         selected_style_config=selected_draft.get("style_config", {}),
@@ -325,6 +339,13 @@ async def regenerate_batch_session_item(
         expert_annotation=payload.expert_annotation,
         counselor_id=counselor_id,
     )
+    updated_item = next(current for current in result.items if current.id == item_id)
+    ResearchEventService().create(db, counselor_id, ResearchEventCreate(
+        event_type="planner_regenerate", batch_session_id=session_id, batch_item_id=item_id,
+        record_id=updated_item.record_id,
+        metadata={"persona_name": payload.selected_persona_name, "planner_before": item.planner_output_json or {}, "planner_after": payload.planner_output or {}},
+    ))
+    return result
 
 
 def _build_annotation_block(annotations: list[object]) -> str:

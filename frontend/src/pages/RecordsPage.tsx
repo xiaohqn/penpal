@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { exportResearchEvents } from "../features/records/api";
 
 import { useAuth } from "../app/auth";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
@@ -18,6 +19,22 @@ export function RecordsPage() {
   const recordsQuery = useRecords(page, 20, scope);
   const recordQuery = useRecord(selectedId, scope);
   const exportRecords = useExportRecordsExcel();
+  const [exportingEvents, setExportingEvents] = useState(false);
+
+  async function handleExportEvents() {
+    setExportingEvents(true);
+    try {
+      const blob = await exportResearchEvents(scope);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "research_events.xlsx";
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExportingEvents(false);
+    }
+  }
   const updateRecord = useUpdateRecord();
   const total = recordsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 20));
@@ -91,6 +108,14 @@ export function RecordsPage() {
                 className="lilac-gradient rounded-full px-5 py-3 text-sm font-medium text-white shadow-card transition disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {exportRecords.isPending ? "导出中..." : "导出记录 Excel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportEvents}
+                disabled={exportingEvents}
+                className="rounded-full border border-amber bg-white/75 px-5 py-3 text-sm font-medium text-amber transition disabled:opacity-45"
+              >
+                {exportingEvents ? "导出中..." : "导出研究轨迹 Excel"}
               </button>
               <Link
                 to="/"

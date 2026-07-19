@@ -37,6 +37,28 @@ export function updateRecord(recordId: number, payload: UpdateRecordPayload, sco
   });
 }
 
+export type ResearchEventPayload = {
+  event_type: string;
+  workspace_task_id?: number | null;
+  batch_session_id?: number | null;
+  batch_item_id?: number | null;
+  record_id?: number | null;
+  before_text?: string;
+  after_text?: string;
+  annotations?: Record<string, unknown>[];
+  metadata?: Record<string, unknown>;
+};
+
+export function logResearchEvent(payload: ResearchEventPayload) {
+  return request("/research/events", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function exportResearchEvents(scope: "mine" | "all" = "mine") {
+  const response = await fetch(buildApiUrl(`/api/v1/research/events/export?scope=${scope}`), { headers: getAuthHeaders() });
+  if (!response.ok) throw new Error(await response.text());
+  return response.blob();
+}
+
 export async function importBatchExcel(file: File) {
   const formData = new FormData();
   formData.append("file", file);

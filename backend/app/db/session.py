@@ -103,6 +103,13 @@ def init_db(engine: Engine) -> None:
             engine,
             consultation_columns,
             "consultation_records",
+            "workspace_task_id",
+            "INTEGER",
+        )
+        _ensure_sqlite_column(
+            engine,
+            consultation_columns,
+            "consultation_records",
             "batch_session_id",
             "INTEGER",
         )

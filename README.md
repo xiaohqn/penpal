@@ -156,6 +156,10 @@ COUNSELOR_FEATURES_ENABLED=false
 - `POST /api/v1/batch/import`
 - `POST /api/v1/batch/generate/export`
 - `GET /api/v1/batch/records/export`
+- `POST /api/v1/research/events`：追加保存内部研究操作轨迹
+- `GET /api/v1/research/events/export?scope=mine|all`：导出研究轨迹 Excel
+
+研究轨迹以事件形式保存，不随最终记录修改而覆盖。当前记录人工编辑、局部批注添加/删除、局部批注重写、Planner 重生成、版本回退和最终提交；文本类事件自动保存操作前后全文及 `diff_json`。
 
 ## 数据沉淀
 

@@ -19,6 +19,7 @@ import { WorkspaceTaskSidebar } from "../components/WorkspaceTaskSidebar";
 import scirScLogo from "../assets/logo-mark.png";
 import { useGenerationWorkspace, usePersonas } from "../features/generation/hooks";
 import type { DraftCandidate, PlannerOutput } from "../features/generation/types";
+import { logResearchEvent } from "../features/records/api";
 import {
   useAssignedMailThreads,
   useCreateAssignedThreadWorkspaceSession,
@@ -48,6 +49,7 @@ import type { WorkspaceTask, WorkspaceTaskSavePayload, WorkspaceTaskState, Works
 
 type WorkspaceMode = "single" | "excel_batch" | "mail_batch";
 type RightPanelTab = "planner" | "revision" | "evaluation";
+type FinalizationMode = "direct_accept" | "manual_edit" | "annotation_patch" | "planner_regenerate" | "full_rewrite";
 type WorkspaceBatchItem = ReturnType<typeof mapBatchSessionItem>;
 const DEFAULT_PERSONA_NAME = "理性破局教练";
 const PERSONA_DISPLAY_NAMES: Record<string, string> = {
@@ -57,6 +59,42 @@ const PERSONA_DISPLAY_NAMES: Record<string, string> = {
 
 function getPersonaDisplayName(personaName: string) {
   return PERSONA_DISPLAY_NAMES[personaName] ?? personaName;
+}
+
+function textHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function validAnnotationsForResponse(annotations: SourceAnnotation[], response: string) {
+  return annotations
+    .filter((annotation) => !annotation.quote.trim() || response.includes(annotation.quote.trim()))
+    .map((annotation) => ({
+      ...annotation,
+      target_response_hash: annotation.target_response_hash ?? textHash(response),
+    }));
+}
+
+function inferFinalizationMode(
+  mode: FinalizationMode,
+  initialResponse: string,
+  finalResponse: string,
+  versions: ResponseVersion[],
+) {
+  if (mode !== "direct_accept") {
+    return mode;
+  }
+  const activeSource = versions.length > 0 ? versions[versions.length - 1]?.source ?? "" : "";
+  if (activeSource === "planner_regenerate" || activeSource === "annotation_regenerate") {
+    return "planner_regenerate";
+  }
+  if (activeSource === "annotation_patch") {
+    return "annotation_patch";
+  }
+  return initialResponse.trim() && initialResponse.trim() !== finalResponse.trim() ? "manual_edit" : "direct_accept";
 }
 
 const DEFAULT_INPUT = `这段时间我过得特别难受。每天早上想到要去学校，心里就沉甸甸的，很害怕。我不是不想学习，但上课时总控制不住地分心，总担心同学在背后议论我。放学我也尽量绕路，躲开那几个经常堵我的同学。
@@ -296,6 +334,9 @@ export function WorkspacePage() {
   const [responseVersions, setResponseVersions] = useState<ResponseVersion[]>([]);
   const [responseEvaluation, setResponseEvaluation] = useState<ResponseEvaluation>(EMPTY_EVALUATION);
   const [activeVersionIndex, setActiveVersionIndex] = useState(0);
+  const [initialAiResponse, setInitialAiResponse] = useState("");
+  const [initialPlannerOutput, setInitialPlannerOutput] = useState<PlannerOutput | null>(null);
+  const [finalizationMode, setFinalizationMode] = useState<FinalizationMode>("direct_accept");
   const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("planner");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [batchDashboardOpen, setBatchDashboardOpen] = useState(false);
@@ -337,6 +378,29 @@ export function WorkspacePage() {
       ? currentBatchItem.context_json
       : legacySplit?.context ?? null;
   const activeBatchItemIdRef = useRef<number | null>(null);
+  const lastLoggedPolishedTextRef = useRef("");
+  const saveInFlightRef = useRef(false);
+  const lastSavedPayloadRef = useRef("");
+
+  function researchContext() {
+    return {
+      workspace_task_id: activeWorkspaceTaskId,
+      batch_session_id: currentBatchItem?.session_id ?? null,
+      batch_item_id: currentBatchItem?.id ?? null,
+      record_id: currentBatchItem?.record_id ?? null,
+    };
+  }
+
+  function logEvent(eventType: string, options: { before?: string; after?: string; annotations?: SourceAnnotation[]; metadata?: Record<string, unknown> } = {}) {
+    void logResearchEvent({
+      event_type: eventType,
+      ...researchContext(),
+      before_text: options.before ?? "",
+      after_text: options.after ?? "",
+      annotations: (options.annotations ?? []) as unknown as Record<string, unknown>[],
+      metadata: options.metadata ?? {},
+    }).catch(() => undefined);
+  }
 
   useEffect(() => {
     activeBatchItemIdRef.current = currentBatchItem?.id ?? null;
@@ -362,6 +426,9 @@ export function WorkspacePage() {
       responseVersions,
       responseEvaluation,
       activeVersionIndex,
+      initialAiResponse,
+      initialPlannerOutput,
+      finalizationMode,
       useDeepThinking,
       activeRightTab,
     };
@@ -396,6 +463,9 @@ export function WorkspacePage() {
     setResponseVersions(state.responseVersions || []);
     setResponseEvaluation(state.responseEvaluation || EMPTY_EVALUATION);
     setActiveVersionIndex(state.activeVersionIndex ?? 0);
+    setInitialAiResponse(String(state.initialAiResponse ?? ""));
+    setInitialPlannerOutput((state.initialPlannerOutput as PlannerOutput) ?? null);
+    setFinalizationMode((state.finalizationMode as FinalizationMode) || "direct_accept");
     setUseDeepThinking(Boolean(state.useDeepThinking));
     setActiveRightTab((state.activeRightTab as RightPanelTab) || "planner");
     if (state.drafts?.length) {
@@ -423,6 +493,7 @@ export function WorkspacePage() {
   }
 
   async function handleNewSingleTask() {
+    lastSavedPayloadRef.current = "";
     setWorkspaceMode("single");
     setActiveSessionId(null);
     setActiveWorkspaceTaskId(null);
@@ -437,6 +508,9 @@ export function WorkspacePage() {
     setResponseVersions([]);
     setResponseEvaluation(EMPTY_EVALUATION);
     setActiveVersionIndex(0);
+    setInitialAiResponse("");
+    setInitialPlannerOutput(null);
+    setFinalizationMode("direct_accept");
     setActiveRightTab("planner");
     try {
       const created = await createWorkspaceTask.mutateAsync({
@@ -455,6 +529,9 @@ export function WorkspacePage() {
           responseVersions: [],
           responseEvaluation: EMPTY_EVALUATION,
           activeVersionIndex: 0,
+          initialAiResponse: "",
+          initialPlannerOutput: null,
+          finalizationMode: "direct_accept",
           useDeepThinking,
           activeRightTab: "planner",
         },
@@ -504,6 +581,9 @@ export function WorkspacePage() {
     activeRightTab,
     drafts,
     expertAnnotation,
+    finalizationMode,
+    initialAiResponse,
+    initialPlannerOutput,
     isWorkspaceBatchMode,
     polishedText,
     responseEvaluation,
@@ -572,11 +652,24 @@ export function WorkspacePage() {
 
     resetWorkspace();
     const splitInput = splitLegacyMailThreadInput(currentBatchItem.user_input);
+    const snapshot = currentBatchItem.sample_snapshot_json ?? {};
+    const snapshotInitialAi = String(snapshot.initial_ai_response ?? snapshot.initialAiResponse ?? "");
+    const fallbackInitialAi =
+      snapshotInitialAi ||
+      String(currentBatchItem.draft_candidates_json?.[0]?.response ?? "") ||
+      currentBatchItem.ai_selected_raw_response ||
+      currentBatchItem.latest_response ||
+      "";
     setUserInput(splitInput.userInput);
     setSelectedPersonas(personas[0]?.name ? [personas[0].name] : currentBatchItem.selected_persona_names ?? []);
     setSourceAnnotations(currentBatchItem.source_annotations_json ?? []);
     setResponseVersions(currentBatchItem.response_versions_json ?? []);
     setActiveVersionIndex(currentBatchItem.active_version_index ?? 0);
+    setInitialAiResponse(fallbackInitialAi);
+    setInitialPlannerOutput(
+      ((snapshot.planner_before ?? snapshot.initial_planner_output ?? currentBatchItem.draft_candidates_json?.[0]?.planner_output ?? currentBatchItem.planner_output_json ?? null) as PlannerOutput | null),
+    );
+    setFinalizationMode((snapshot.finalization_mode as FinalizationMode) || "direct_accept");
     setExpertAnnotation(currentBatchItem.expert_annotation ?? "");
     setResponseEvaluation(
       normalizeResponseEvaluation((currentBatchItem.evaluation_json as ResponseEvaluation) ?? EMPTY_EVALUATION),
@@ -660,44 +753,99 @@ export function WorkspacePage() {
   }
 
   function handleAddSourceAnnotation(annotation: SourceAnnotation) {
-    setSourceAnnotations((current) => [...current, annotation]);
+    setSourceAnnotations((current) => [
+      ...current,
+      {
+        ...annotation,
+        target_version_index: activeVersionIndex,
+        target_response_hash: textHash(polishedText),
+      },
+    ]);
+    logEvent("annotation_added", { before: polishedText, after: polishedText, annotations: [annotation] });
   }
 
   function handleRemoveSourceAnnotation(annotationId: string) {
+    const removed = sourceAnnotations.find((item) => item.id === annotationId);
     setSourceAnnotations((current) => current.filter((item) => item.id !== annotationId));
+    logEvent("annotation_removed", { before: polishedText, after: polishedText, annotations: removed ? [removed] : [], metadata: { annotation_id: annotationId } });
   }
 
-  function buildSampleSnapshot() {
+  function handlePolishedTextChange(value: string) {
+    setPolishedText(value);
+    const baseline = responseVersions.length > 0 ? responseVersions[responseVersions.length - 1]?.response ?? "" : activeDraft?.response ?? initialAiResponse;
+    if (value.trim() && baseline.trim() && value.trim() !== baseline.trim()) {
+      setFinalizationMode("manual_edit");
+    }
+  }
+
+  function handlePolishedTextBlur() {
+    const before = lastLoggedPolishedTextRef.current || activeDraft?.response || initialAiResponse || "";
+    if (before !== polishedText) {
+      logEvent("manual_edit", { before, after: polishedText });
+      lastLoggedPolishedTextRef.current = polishedText;
+    }
+  }
+
+  function buildSampleSnapshot(options?: {
+    finalResponse?: string;
+    annotations?: SourceAnnotation[];
+    versions?: ResponseVersion[];
+    mode?: FinalizationMode;
+  }) {
     const normalizedExpertAnnotation = expertAnnotation.trim();
+    const finalResponse = options?.finalResponse ?? polishedText;
+    const versions = options?.versions ?? responseVersions;
+    const annotations = options?.annotations ?? validAnnotationsForResponse(sourceAnnotations, finalResponse);
+    const initialResponse = initialAiResponse || activeDraft?.response || currentBatchItem?.ai_selected_raw_response || "";
+    const inferredMode = inferFinalizationMode(options?.mode ?? finalizationMode, initialResponse, finalResponse, versions);
     return {
       user_input: userInput,
       selected_persona_name: activeDraft?.persona_name ?? currentBatchItem?.selected_persona_name ?? selectedPersona ?? "",
       selected_persona_names: selectedPersonas,
-      ai_selected_raw_response: activeDraft?.response ?? currentBatchItem?.ai_selected_raw_response ?? "",
-      expert_polished_response: polishedText,
+      ai_selected_raw_response: initialResponse,
+      expert_polished_response: finalResponse,
       expert_annotation: normalizedExpertAnnotation,
       evaluation: normalizeResponseEvaluation(responseEvaluation),
-      source_annotations: sourceAnnotations,
-      response_versions: responseVersions,
+      source_annotations: annotations,
+      response_versions: versions,
       active_version_index: activeVersionIndex,
+      initial_ai_response: initialResponse,
+      planner_before: initialPlannerOutput ?? activeDraft?.planner_output ?? currentBatchItem?.planner_output_json ?? {},
+      planner_after: activeDraft?.planner_output ?? currentBatchItem?.planner_output_json ?? {},
+      regenerated_ai_response: inferredMode === "planner_regenerate" ? finalResponse : "",
+      manual_edited_response: inferredMode === "manual_edit" ? finalResponse : "",
+      final_response: finalResponse,
+      finalization_mode: inferredMode,
     };
   }
 
   async function handleGenerate() {
     setStatusText(null);
     setResponseEvaluation(EMPTY_EVALUATION);
+    setSourceAnnotations([]);
+    setResponseVersions([]);
+    setActiveVersionIndex(0);
+    setExpertAnnotation("");
+    setInitialAiResponse("");
+    setInitialPlannerOutput(null);
+    setFinalizationMode("direct_accept");
     if (selectedPersonas.length === 0) {
       setStatusText("默认回信模型尚未加载完成，请稍后再试。");
       return;
     }
     const task = await ensureWorkspaceTask("in_progress");
-    await startGeneration({
+    const generatedDrafts = await startGeneration({
       user_input: buildGenerationInput(userInput, currentWorkspaceContext),
       persona_names: selectedPersonas,
       compare_sources: false,
       source_mode: "auto",
       use_deep_thinking: useDeepThinking,
     });
+    const firstDraft = generatedDrafts[0];
+    if (firstDraft) {
+      setInitialAiResponse(firstDraft.response);
+      setInitialPlannerOutput((firstDraft.planner_output ?? {}) as PlannerOutput);
+    }
     await ensureWorkspaceTask("in_progress", task?.id ?? activeWorkspaceTaskId);
   }
 
@@ -705,6 +853,9 @@ export function WorkspacePage() {
     if (!currentBatchItem || !activeDraft) {
       return;
     }
+    const sanitizedAnnotations = validAnnotationsForResponse(sourceAnnotations, polishedText);
+    const savedInitialAiResponse = initialAiResponse || activeDraft.response;
+    const savedFinalizationMode = inferFinalizationMode(finalizationMode, savedInitialAiResponse, polishedText, responseVersions);
 
     const nextVersions =
       responseVersions.length > 0
@@ -717,7 +868,8 @@ export function WorkspacePage() {
               selected_persona_name: activeDraft.persona_name,
               created_at: new Date().toISOString(),
               source: "manual",
-              source_annotations: sourceAnnotations,
+              source_annotations: sanitizedAnnotations,
+              target_response_hash: textHash(polishedText),
             },
           ];
 
@@ -730,7 +882,7 @@ export function WorkspacePage() {
         selected_style_config: activeDraft.style_config,
         planner_output: activeDraft.planner_output,
         draft_candidates: drafts,
-        ai_selected_raw_response: activeDraft.response,
+        ai_selected_raw_response: savedInitialAiResponse,
         latest_response: polishedText,
         expert_annotation: expertAnnotation,
         rag_ready: "approved",
@@ -738,8 +890,13 @@ export function WorkspacePage() {
         sample_tags: {},
         planner_labels: {},
         evaluation: normalizeResponseEvaluation(responseEvaluation),
-        sample_snapshot: buildSampleSnapshot(),
-        source_annotations: sourceAnnotations,
+        sample_snapshot: buildSampleSnapshot({
+          finalResponse: polishedText,
+          annotations: sanitizedAnnotations,
+          versions: nextVersions,
+          mode: savedFinalizationMode,
+        }),
+        source_annotations: sanitizedAnnotations,
         response_versions: nextVersions,
         active_version_index: activeVersionIndex,
         status,
@@ -759,9 +916,12 @@ export function WorkspacePage() {
   }
 
   async function handleSave() {
-    if (!activeDraft || !polishedText.trim()) {
+    if (!activeDraft || !polishedText.trim() || saveInFlightRef.current) {
       return;
     }
+    const sanitizedAnnotations = validAnnotationsForResponse(sourceAnnotations, polishedText);
+    const savedInitialAiResponse = initialAiResponse || activeDraft.response;
+    const savedFinalizationMode = inferFinalizationMode(finalizationMode, savedInitialAiResponse, polishedText, responseVersions);
 
     const nextVersions =
       responseVersions.length > 0
@@ -774,7 +934,8 @@ export function WorkspacePage() {
               selected_persona_name: activeDraft.persona_name,
               created_at: new Date().toISOString(),
               source: "manual",
-              source_annotations: sourceAnnotations,
+              source_annotations: sanitizedAnnotations,
+              target_response_hash: textHash(polishedText),
             },
           ];
 
@@ -784,7 +945,7 @@ export function WorkspacePage() {
       selected_style_config: activeDraft.style_config,
       planner_output: activeDraft.planner_output,
       draft_candidates: drafts,
-      ai_selected_raw_response: activeDraft.response,
+      ai_selected_raw_response: savedInitialAiResponse,
       expert_polished_response: polishedText,
       expert_annotation: expertAnnotation,
       rag_ready: "approved",
@@ -792,15 +953,44 @@ export function WorkspacePage() {
       sample_tags: {},
       planner_labels: {},
       evaluation: normalizeResponseEvaluation(responseEvaluation),
-      sample_snapshot: buildSampleSnapshot(),
-      source_annotations: sourceAnnotations,
+      sample_snapshot: buildSampleSnapshot({
+        finalResponse: polishedText,
+        annotations: sanitizedAnnotations,
+        versions: nextVersions,
+        mode: savedFinalizationMode,
+      }),
+      source_annotations: sanitizedAnnotations,
       response_versions: nextVersions,
+      workspace_task_id: activeWorkspaceTaskId,
       batch_session_id: currentBatchItem?.session_id ?? null,
       batch_item_id: currentBatchItem?.id ?? null,
     };
 
+    const payloadFingerprint = JSON.stringify(payload);
+    if (lastSavedPayloadRef.current === payloadFingerprint) {
+      setStatusText("当前版本已经记录，无需重复保存。");
+      return;
+    }
+
+    saveInFlightRef.current = true;
     try {
       const record = await saveRecord.mutateAsync(payload);
+      lastSavedPayloadRef.current = payloadFingerprint;
+      await logResearchEvent({
+        event_type: "record_submitted",
+        workspace_task_id: activeWorkspaceTaskId,
+        batch_session_id: currentBatchItem?.session_id ?? null,
+        batch_item_id: currentBatchItem?.id ?? null,
+        record_id: record.id,
+        before_text: savedInitialAiResponse,
+        after_text: polishedText,
+        annotations: sanitizedAnnotations as unknown as Record<string, unknown>[],
+        metadata: {
+          finalization_mode: savedFinalizationMode,
+          regeneration_count: nextVersions.filter((version) => version.source === "planner_regenerate" || version.source === "annotation_patch").length,
+          version_count: nextVersions.length,
+        },
+      }).catch(() => undefined);
       if (currentBatchItem) {
         const detail = await handlePersistBatchItem("completed", record.id);
         const allDone = Boolean(detail && detail.total_items > 0 && detail.completed_items >= detail.total_items);
@@ -823,6 +1013,8 @@ export function WorkspacePage() {
       }
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      saveInFlightRef.current = false;
     }
   }
 
@@ -938,6 +1130,7 @@ export function WorkspacePage() {
       if (batchItemIdAtStart !== null && activeBatchItemIdRef.current !== batchItemIdAtStart) {
         return;
       }
+      const sanitizedAnnotations = validAnnotationsForResponse(sourceAnnotations, polishedText);
       const rewrittenText = applyAnnotationRevisions(polishedText, sourceAnnotations, rewriteResult.revisions);
       const existingVersions =
         responseVersions.length > 0
@@ -950,7 +1143,8 @@ export function WorkspacePage() {
                 selected_persona_name: activeDraft.persona_name,
                 created_at: new Date().toISOString(),
                 source: "manual",
-                source_annotations: sourceAnnotations,
+                source_annotations: sanitizedAnnotations,
+                target_response_hash: textHash(polishedText),
               },
             ];
 
@@ -961,13 +1155,16 @@ export function WorkspacePage() {
         selected_persona_name: activeDraft.persona_name,
         created_at: new Date().toISOString(),
         source: "annotation_patch",
-        source_annotations: sourceAnnotations,
+        source_annotations: sanitizedAnnotations,
+        target_response_hash: textHash(rewrittenText),
       };
 
       setResponseVersions([...existingVersions, nextVersion]);
       setActiveVersionIndex(nextVersion.version_index);
       setPolishedText(rewrittenText);
       setResponseEvaluation(EMPTY_EVALUATION);
+      setFinalizationMode("annotation_patch");
+      logEvent("annotation_patch", { before: polishedText, after: rewrittenText, annotations: sanitizedAnnotations, metadata: { version_index: nextVersion.version_index } });
 
       if (currentBatchItem) {
         const detail = await updateBatchSessionItem.mutateAsync({
@@ -979,7 +1176,7 @@ export function WorkspacePage() {
             selected_style_config: activeDraft.style_config,
             planner_output: activeDraft.planner_output,
             draft_candidates: drafts,
-            ai_selected_raw_response: activeDraft.response,
+            ai_selected_raw_response: initialAiResponse || activeDraft.response,
             latest_response: rewrittenText,
             expert_annotation: expertAnnotation,
             rag_ready: "approved",
@@ -989,12 +1186,17 @@ export function WorkspacePage() {
             risk_assessment: activeDraft.safety_review ?? {},
             evaluation: EMPTY_EVALUATION,
             sample_snapshot: {
-              ...buildSampleSnapshot(),
+              ...buildSampleSnapshot({
+                finalResponse: rewrittenText,
+                annotations: sanitizedAnnotations,
+                versions: [...existingVersions, nextVersion],
+                mode: "annotation_patch",
+              }),
               expert_polished_response: rewrittenText,
               response_versions: [...existingVersions, nextVersion],
               active_version_index: nextVersion.version_index,
             },
-            source_annotations: sourceAnnotations,
+            source_annotations: sanitizedAnnotations,
             response_versions: [...existingVersions, nextVersion],
             active_version_index: nextVersion.version_index,
             status: currentBatchItem.status === "completed" ? "completed" : "in_progress",
@@ -1041,6 +1243,7 @@ export function WorkspacePage() {
           use_deep_thinking: useDeepThinking,
         });
         appendPlannerRegeneratedVersion(selectedDraft, plannerOutput);
+        logEvent("planner_regenerate", { metadata: { persona_name: activeDraft.persona_name, planner_before: activeDraft.planner_output, planner_after: plannerOutput } });
         setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
         return;
       }
@@ -1081,6 +1284,7 @@ export function WorkspacePage() {
         setActiveVersionIndex(updatedItem.active_version_index ?? 0);
         setPolishedText(updatedItem.latest_response ?? polishedText);
         setResponseEvaluation(EMPTY_EVALUATION);
+        setFinalizationMode("planner_regenerate");
         setStatusText("已按修改后的 Planner 重新生成全文，并新增一条可回退版本。");
       }
     } catch (error) {
@@ -1100,7 +1304,10 @@ export function WorkspacePage() {
               selected_persona_name: activeDraft?.persona_name ?? "未标记风格",
               created_at: new Date().toISOString(),
               source: "manual",
-              source_annotations: sourceAnnotations,
+              source_annotations: validAnnotationsForResponse(sourceAnnotations, polishedText),
+              planner_before: initialPlannerOutput ?? activeDraft?.planner_output ?? {},
+              planner_after: activeDraft?.planner_output ?? {},
+              target_response_hash: textHash(polishedText),
             },
           ];
 
@@ -1111,7 +1318,10 @@ export function WorkspacePage() {
       selected_persona_name: selectedDraft.persona_name,
       created_at: new Date().toISOString(),
       source: "planner_regenerate",
-      source_annotations: sourceAnnotations,
+      source_annotations: validAnnotationsForResponse(sourceAnnotations, polishedText),
+      planner_before: activeDraft?.planner_output ?? initialPlannerOutput ?? {},
+      planner_after: plannerOutput,
+      target_response_hash: textHash(selectedDraft.response),
       safety_review: selectedDraft.safety_review ?? {},
     };
 
@@ -1120,6 +1330,7 @@ export function WorkspacePage() {
     setActiveVersionIndex(nextVersion.version_index);
     setPolishedText(selectedDraft.response);
     setResponseEvaluation(EMPTY_EVALUATION);
+    setFinalizationMode("planner_regenerate");
     setSelectedPersona(selectedDraft.draft_id);
   }
 
@@ -1135,6 +1346,7 @@ export function WorkspacePage() {
       setSourceAnnotations(version.source_annotations ?? []);
       setResponseEvaluation(EMPTY_EVALUATION);
       setStatusText(`已回退到版本 ${versionIndex + 1}`);
+      logEvent("version_rollback", { before: polishedText, after: version.response, annotations: version.source_annotations, metadata: { target_version_index: versionIndex } });
       return;
     }
     try {
@@ -1258,10 +1470,11 @@ export function WorkspacePage() {
 
             <PolishingEditor
               value={polishedText}
-              onChange={setPolishedText}
+              onChange={handlePolishedTextChange}
               annotations={sourceAnnotations}
               onAddAnnotation={handleAddSourceAnnotation}
               onRemoveAnnotation={handleRemoveSourceAnnotation}
+              onBlur={handlePolishedTextBlur}
             />
             <SaveRecordBar
               canSave={Boolean(activeDraft && polishedText.trim()) && !generationBusy && !(hasVisibleBatch && currentBatchItem?.status === "completed")}

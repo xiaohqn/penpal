@@ -32,29 +32,45 @@ class RecordService:
             expert_annotation=payload.expert_annotation,
             source_annotations=payload.source_annotations,
         )
-        record = ConsultationRecord(
-            counselor_id=counselor_id,
-            user_input=payload.user_input,
-            selected_persona_name=payload.selected_persona_name,
-            selected_style_config_json=payload.selected_style_config,
-            planner_output_json=payload.planner_output,
-            draft_candidates_json=payload.draft_candidates,
-            ai_selected_raw_response=payload.ai_selected_raw_response,
-            expert_polished_response=payload.expert_polished_response,
-            expert_annotation=payload.expert_annotation,
-            rag_ready=self._derive_rag_ready(payload),
-            sample_reason=payload.sample_reason,
-            sample_tags_json=sample_tags,
-            planner_labels_json=planner_labels,
-            risk_assessment_json=payload.risk_assessment,
-            evaluation_json=payload.evaluation,
-            sample_snapshot_json=payload.sample_snapshot,
-            source_annotations_json=payload.source_annotations,
-            response_versions_json=payload.response_versions,
-            batch_session_id=payload.batch_session_id,
-            batch_item_id=payload.batch_item_id,
-        )
-        db.add(record)
+        record = None
+        if payload.workspace_task_id is not None:
+            record = db.scalar(
+                select(ConsultationRecord).where(
+                    ConsultationRecord.counselor_id == counselor_id,
+                    ConsultationRecord.workspace_task_id == payload.workspace_task_id,
+                )
+            )
+        elif payload.batch_item_id is not None:
+            record = db.scalar(
+                select(ConsultationRecord).where(
+                    ConsultationRecord.counselor_id == counselor_id,
+                    ConsultationRecord.batch_item_id == payload.batch_item_id,
+                )
+            )
+        if record is None:
+            record = ConsultationRecord(counselor_id=counselor_id, user_input=payload.user_input)
+            db.add(record)
+
+        record.user_input = payload.user_input
+        record.selected_persona_name = payload.selected_persona_name
+        record.selected_style_config_json = payload.selected_style_config
+        record.planner_output_json = payload.planner_output
+        record.draft_candidates_json = payload.draft_candidates
+        record.ai_selected_raw_response = payload.ai_selected_raw_response
+        record.expert_polished_response = payload.expert_polished_response
+        record.expert_annotation = payload.expert_annotation
+        record.rag_ready = self._derive_rag_ready(payload)
+        record.sample_reason = payload.sample_reason
+        record.sample_tags_json = sample_tags
+        record.planner_labels_json = planner_labels
+        record.risk_assessment_json = payload.risk_assessment
+        record.evaluation_json = payload.evaluation
+        record.sample_snapshot_json = payload.sample_snapshot
+        record.source_annotations_json = payload.source_annotations
+        record.response_versions_json = payload.response_versions
+        record.workspace_task_id = payload.workspace_task_id
+        record.batch_session_id = payload.batch_session_id
+        record.batch_item_id = payload.batch_item_id
         db.commit()
         db.refresh(record)
         return ConsultationRecordResponse.model_validate(record)
