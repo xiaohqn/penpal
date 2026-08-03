@@ -1,4 +1,14 @@
 export type PlannerOutput = {
+  surface_problems?: string[];
+  possible_core_concern?: string;
+  supporting_evidence?: Array<{ quote: string; supports: string }>;
+  uncertainties?: string[];
+  // Legacy field retained only for reading older records.
+  reply_focus?: string;
+  avoid_conclusions?: string[];
+  advice_principles?: string[];
+  safety_assessment?: PlannerSafetyAssessment;
+  // Legacy fields remain readable for records generated before formulation v2.
   intention?: string;
   intent_analysis?: string;
   core_issue?: string;
@@ -8,6 +18,17 @@ export type PlannerOutput = {
   generation_plan?: string;
   rag_references?: RagReference[];
   style_summary?: Record<string, string>;
+};
+
+export type PlannerSafetyAssessment = {
+  risk_level?: string;
+  risk_types?: string[];
+  evidence?: string[];
+  reasoning?: string;
+  uncertainties?: string[];
+  avoid_in_reply?: string[];
+  protective_suggestions?: string[];
+  handoff?: "none" | "review" | "priority" | "urgent" | string;
 };
 
 export type RagReference = {

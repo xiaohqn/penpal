@@ -35,6 +35,10 @@ export type RiskAssessment = {
   categories: string[];
   signals: string[];
   reasoning: string;
+  uncertainties: string[];
+  avoid_in_reply: string[];
+  protective_suggestions: string[];
+  handoff: "none" | "review" | "priority" | "urgent";
   reviewed: boolean;
   created_at: string;
 };

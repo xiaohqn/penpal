@@ -11,12 +11,16 @@ type Props = {
 };
 
 const TEXT_FIELDS: Array<{ key: keyof PlannerOutput; label: string }> = [
-  { key: "intention", label: "意图与需求" },
-  { key: "core_issue", label: "核心问题" },
-  { key: "wrong_but_easy_answer", label: "容易写偏" },
-  { key: "value_guidance", label: "价值观引导" },
-  { key: "risk_assessment", label: "风险判断" },
+  { key: "possible_core_concern", label: "可能的核心困扰" },
   { key: "generation_plan", label: "生成大纲" },
+  { key: "risk_assessment", label: "风险判断" },
+];
+
+const LIST_FIELDS: Array<{ key: keyof PlannerOutput; label: string }> = [
+  { key: "surface_problems", label: "表层问题" },
+  { key: "uncertainties", label: "不确定点" },
+  { key: "avoid_conclusions", label: "避免直接下结论" },
+  { key: "advice_principles", label: "建议原则与可选路径" },
 ];
 
 export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate, regenerating = false }: Props) {
@@ -24,7 +28,7 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
   const [ragModalOpen, setRagModalOpen] = useState(false);
 
   useEffect(() => {
-    const nextPlanner = stripStoryPlan(plannerOutput ?? {});
+    const nextPlanner = normalizeFormulationForUi(stripStoryPlan(plannerOutput ?? {}));
     setDraftPlanner(nextPlanner);
   }, [plannerOutput]);
 
@@ -40,6 +44,13 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
 
   function updateTextField(key: keyof PlannerOutput, value: string) {
     syncPlanner({ ...draftPlanner, [key]: value });
+  }
+
+  function updateListField(key: keyof PlannerOutput, value: string) {
+    syncPlanner({
+      ...draftPlanner,
+      [key]: value.split("\n").map((item) => item.trim()).filter(Boolean),
+    });
   }
 
   function handleRegenerateFromPlanner() {
@@ -77,6 +88,16 @@ export function PlannerInsightAccordion({ plannerOutput, onChange, onRegenerate,
               id={`planner-${String(field.key)}`}
               value={String(draftPlanner[field.key] ?? "")}
               onChange={(value) => updateTextField(field.key, value)}
+            />
+          </section>
+        ))}
+        {LIST_FIELDS.map((field) => (
+          <section key={field.key} className="rounded-[18px] border border-transparent bg-paper/42 px-3 py-3 transition focus-within:border-amber/40 focus-within:bg-white/78">
+            <label htmlFor={`planner-${String(field.key)}`} className="mb-1 block text-xs uppercase tracking-[0.18em] text-amber">{field.label}</label>
+            <PlannerInlineTextarea
+              id={`planner-${String(field.key)}`}
+              value={((draftPlanner[field.key] as string[] | undefined) ?? []).join("\n")}
+              onChange={(value) => updateListField(field.key, value)}
             />
           </section>
         ))}
@@ -285,6 +306,46 @@ function stripStoryPlan(plannerOutput: PlannerOutput): PlannerOutput {
     aliases.generation_plan ?? aliases.reply_outline ?? aliases.outline ?? aliases.plan ?? aliases.writing_plan ?? aliases.response_plan,
   );
   return normalized;
+}
+
+function normalizeFormulationForUi(plannerOutput: PlannerOutput): PlannerOutput {
+  const hasFormulation = Boolean(
+    plannerOutput.possible_core_concern
+    || plannerOutput.generation_plan
+    || plannerOutput.surface_problems?.length,
+  );
+  if (hasFormulation) {
+    return {
+      ...plannerOutput,
+      generation_plan: plannerOutput.generation_plan ?? plannerOutput.reply_focus ?? "",
+      risk_assessment: plannerOutput.risk_assessment ?? renderRiskAssessment(plannerOutput.safety_assessment),
+    };
+  }
+  return {
+    ...plannerOutput,
+    surface_problems: plannerOutput.intention ? [plannerOutput.intention] : [],
+    possible_core_concern: plannerOutput.core_issue ?? "",
+    supporting_evidence: [],
+    uncertainties: [],
+    avoid_conclusions: plannerOutput.wrong_but_easy_answer ? [plannerOutput.wrong_but_easy_answer] : [],
+    advice_principles: plannerOutput.value_guidance ? [plannerOutput.value_guidance] : [],
+  };
+}
+
+function renderRiskAssessment(safety: PlannerOutput["safety_assessment"]): string {
+  if (!safety) return "";
+  const riskTypes = safety.risk_types?.filter(Boolean) ?? [];
+  const riskText = safety.reasoning?.trim()
+    || (riskTypes.length > 0
+      ? `风险等级 ${safety.risk_level || "未知"}，识别到：${riskTypes.join("、")}。`
+      : safety.risk_level && safety.risk_level !== "NONE"
+        ? `风险等级为 ${safety.risk_level}。`
+        : "未识别到明确安全风险。");
+  const handling = [
+    safety.avoid_in_reply?.length ? `避免：${safety.avoid_in_reply.join("；")}` : "",
+    safety.protective_suggestions?.length ? `可加入：${safety.protective_suggestions.join("；")}` : "",
+  ].filter(Boolean);
+  return `风险识别：${riskText}\n处理方式：${handling.join("；") || "回信按一般支持性原则处理，避免夸大或替用户下结论。"}`;
 }
 
 function renderPlannerText(value: unknown): string {

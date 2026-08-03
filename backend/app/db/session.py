@@ -207,6 +207,11 @@ def init_db(engine: Engine) -> None:
             "assigned_counselor_id",
             "TEXT",
         )
+        risk_columns = {column["name"] for column in inspector.get_columns("risk_assessments")}
+        _ensure_sqlite_column(engine, risk_columns, "risk_assessments", "uncertainties_json", "JSON NOT NULL DEFAULT '[]'")
+        _ensure_sqlite_column(engine, risk_columns, "risk_assessments", "avoid_in_reply_json", "JSON NOT NULL DEFAULT '[]'")
+        _ensure_sqlite_column(engine, risk_columns, "risk_assessments", "protective_suggestions_json", "JSON NOT NULL DEFAULT '[]'")
+        _ensure_sqlite_column(engine, risk_columns, "risk_assessments", "handoff", "TEXT NOT NULL DEFAULT 'none'")
 
 
 def _ensure_sqlite_column(

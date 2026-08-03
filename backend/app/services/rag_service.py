@@ -13,10 +13,10 @@ from app.db.models import ConsultationRecord
 
 
 LABEL_FIELDS = (
-    "core_issue",
-    "wrong_but_easy_answer",
-    "value_guidance",
-    "risk_assessment",
+    "possible_core_concern",
+    "generation_plan",
+    "avoid_conclusions",
+    "advice_principles",
 )
 
 TAG_KEYWORDS = {

@@ -38,6 +38,7 @@ class RecordService:
                 select(ConsultationRecord).where(
                     ConsultationRecord.counselor_id == counselor_id,
                     ConsultationRecord.workspace_task_id == payload.workspace_task_id,
+                    ConsultationRecord.user_input == payload.user_input,
                 )
             )
         elif payload.batch_item_id is not None:

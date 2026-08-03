@@ -46,7 +46,7 @@ class MailThreadService:
             payload.content,
             previous_levels=self._previous_user_risk_levels(db, user_id),
         )
-        forced_human = RISK_ORDER[user_assessment.risk_level] >= RISK_ORDER["HIGH"]
+        forced_human = self._requires_human_handoff(user_assessment)
         crisis = user_assessment.risk_level == "CRISIS"
         if payload.reply_mode == "human" and not self.settings.counselor_features_enabled:
             raise ValueError("当前暂未开放咨询师人工回复")
@@ -168,7 +168,7 @@ class MailThreadService:
         db.flush()
         latest_message = db.scalar(select(MailMessage).where(MailMessage.thread_id == thread.id).order_by(desc(MailMessage.id)))
         self._record_risk(db, user_id, thread.id, latest_message.id if latest_message else None, "user_letter", user_assessment)
-        forced_human = RISK_ORDER[user_assessment.risk_level] >= RISK_ORDER["HIGH"]
+        forced_human = self._requires_human_handoff(user_assessment)
         crisis = user_assessment.risk_level == "CRISIS"
         if forced_human and self.settings.counselor_features_enabled:
             thread.reply_mode = "human"
@@ -425,8 +425,13 @@ class MailThreadService:
             "memory_summary": thread.memory.summary if thread.memory else "",
             "risk": {
                 "level": latest_risk.risk_level if latest_risk is not None else "NONE",
-                "signals": latest_risk.signals if latest_risk is not None else [],
+                "risk_types": latest_risk.categories_json if latest_risk is not None else [],
+                "signals": latest_risk.signals_json if latest_risk is not None else [],
                 "reasoning": latest_risk.reasoning if latest_risk is not None else "",
+                "uncertainties": latest_risk.uncertainties_json if latest_risk is not None else [],
+                "avoid_in_reply": latest_risk.avoid_in_reply_json if latest_risk is not None else [],
+                "protective_suggestions": latest_risk.protective_suggestions_json if latest_risk is not None else [],
+                "handoff": latest_risk.handoff if latest_risk is not None else "none",
             },
             "transcript": transcript,
             "instruction": (
@@ -688,6 +693,10 @@ class MailThreadService:
                 categories_json=assessment.categories,
                 signals_json=assessment.signals,
                 reasoning=assessment.reasoning,
+                uncertainties_json=assessment.uncertainties,
+                avoid_in_reply_json=assessment.avoid_in_reply,
+                protective_suggestions_json=assessment.protective_suggestions,
+                handoff=assessment.handoff,
                 reviewed=False,
             )
         )
@@ -700,6 +709,12 @@ class MailThreadService:
                 .order_by(desc(RiskAssessment.created_at))
                 .limit(5)
             ).all()
+        )
+
+    def _requires_human_handoff(self, assessment: SafetyAssessment) -> bool:
+        return (
+            RISK_ORDER[assessment.risk_level] >= RISK_ORDER["HIGH"]
+            or assessment.handoff in {"priority", "urgent"}
         )
 
     def _migrate_legacy_letters(self, db: Session, user_id: str) -> None:

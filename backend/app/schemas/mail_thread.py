@@ -53,6 +53,10 @@ class RiskAssessmentResponse(DateTimeResponseModel):
     categories: list[str] = Field(validation_alias="categories_json", serialization_alias="categories")
     signals: list[str] = Field(validation_alias="signals_json", serialization_alias="signals")
     reasoning: str
+    uncertainties: list[str] = Field(validation_alias="uncertainties_json", serialization_alias="uncertainties")
+    avoid_in_reply: list[str] = Field(validation_alias="avoid_in_reply_json", serialization_alias="avoid_in_reply")
+    protective_suggestions: list[str] = Field(validation_alias="protective_suggestions_json", serialization_alias="protective_suggestions")
+    handoff: str
     reviewed: bool
     created_at: datetime
 

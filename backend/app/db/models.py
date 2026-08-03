@@ -285,6 +285,10 @@ class RiskAssessment(Base):
     categories_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     signals_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     reasoning: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    uncertainties_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    avoid_in_reply_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    protective_suggestions_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    handoff: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
     reviewed: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 

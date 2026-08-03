@@ -53,6 +53,7 @@ class OrchestrationService:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         completed_by_draft_id: dict[str, dict[str, Any]] = {}
         generator_targets = self._build_generator_targets(compare_sources, source_mode)
+        user_safety_context = self.safety_service.assess_user_letter(user_input).to_prompt_dict()
 
         async def worker(persona_name: str, target: dict[str, str]) -> None:
             worker_started_at = perf_counter()
@@ -68,7 +69,11 @@ class OrchestrationService:
             )
             try:
                 planner_started_at = perf_counter()
-                planner_output = await self.planner_service.create_plan(user_input, persona_name)
+                planner_output = await self.planner_service.create_plan(
+                    user_input,
+                    persona_name,
+                    safety_context=user_safety_context,
+                )
                 planner_ms = self._elapsed_ms(planner_started_at)
                 rag_started_at = perf_counter()
                 planner_output = self._attach_rag_references(
@@ -225,10 +230,15 @@ class OrchestrationService:
                 ordered_personas.append(normalized)
 
         generator_targets = self._build_generator_targets(compare_sources, source_mode)
+        user_safety_context = self.safety_service.assess_user_letter(user_input).to_prompt_dict()
 
         async def worker(persona_name: str, target: dict[str, str]) -> dict[str, Any] | None:
             try:
-                planner_output = await self.planner_service.create_plan(user_input, persona_name)
+                planner_output = await self.planner_service.create_plan(
+                    user_input,
+                    persona_name,
+                    safety_context=user_safety_context,
+                )
                 planner_output = self._attach_rag_references(
                     user_input=user_input,
                     persona_name=persona_name,
@@ -287,6 +297,8 @@ class OrchestrationService:
                 "sample_words",
             }
         }
+        if not planner_output.get("safety_assessment"):
+            planner_output["safety_assessment"] = self.safety_service.assess_user_letter(user_input).to_prompt_dict()
         rag_started_at = perf_counter()
         enriched_planner_output = self._attach_rag_references(
             user_input=user_input,

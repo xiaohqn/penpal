@@ -30,6 +30,8 @@ def test_generator_prompt_bans_generic_empathy_phrases():
     assert "不要只避开示例原句后换一个同义说法" in prompt
     assert "泛化式共情句" in prompt
     assert "贴着来信细节" in prompt
+    assert "不得虚构用户没有提到的场景、动作" in prompt
+    assert "原则 + 可选路径" in prompt
 
 
 def test_planner_prompt_keeps_generic_empathy_out_of_plan():
@@ -41,6 +43,10 @@ def test_planner_prompt_keeps_generic_empathy_out_of_plan():
     assert "谁遇到这种情况都无法平静" in prompt
     assert "泛化共情句" in prompt
     assert "来信细节" in prompt
+    assert "possible_core_concern" in prompt
+    assert "supporting_evidence" in prompt
+    assert "uncertainties" in prompt
+    assert "avoid_conclusions" in prompt
 
 
 def test_rag_rejects_generic_empathy_variants():
