@@ -194,10 +194,12 @@ class GeneratorService:
 
     def _resolve_extra_body(self, audience: str, use_deep_thinking: bool) -> dict[str, object]:
         if audience == "user":
-            return self.settings.effective_user_generator_extra_body
-        if use_deep_thinking:
-            return {}
-        return self.settings.effective_counselor_generator_extra_body
+            return dict(self.settings.effective_user_generator_extra_body)
+        extra_body = dict(self.settings.effective_counselor_generator_extra_body)
+        extra_body["thinking"] = {
+            "type": "enabled" if use_deep_thinking else "disabled",
+        }
+        return extra_body
 
     def split_text(self, text: str) -> list[str]:
         chunk_size = max(1, self.settings.stream_chunk_size)
